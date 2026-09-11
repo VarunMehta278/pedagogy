@@ -1,0 +1,21 @@
+# Server-specific ignores.
+#
+# The repository root also carries a .gitignore covering these.
+# This file exists so that server/ stays safe even if it is ever
+# initialised as its own repository.
+
+node_modules/
+dist/
+coverage/
+
+# Secrets. SUPABASE_SERVICE_ROLE_KEY and JWT_SECRET live here.
+.env
+.env.*
+!.env.example
+
+# Saved sessions from manual curl testing — real JWTs.
+cookies.txt
+*-cookies.txt
+
+*.log
+.DS_Store

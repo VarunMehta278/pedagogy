@@ -1,0 +1,363 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------
+ * Design tokens
+ *
+ * The palette is deep indigo through violet. Everything is expressed
+ * in oklch so that light and dark share the same hue and only move
+ * lightness and chroma — that is what keeps the two themes feeling
+ * like one product rather than two.
+ *
+ * Neutrals are not pure grey. They carry a trace of the brand hue
+ * (chroma 0.004–0.02 at hue 280), which is the difference between a
+ * surface that looks considered and one that looks like a default.
+ * ------------------------------------------------------------------ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Brand ramp, for gradients and decorative work. Distinct from
+   * --primary so that "the brand colour" and "the colour a button is"
+   * can move independently. */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-violet: var(--violet);
+  --color-violet-subtle: var(--violet-subtle);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* A tighter, cooler shadow scale than Tailwind's default. Real
+   * elevation comes from two stacked shadows — a tight contact
+   * shadow and a wide soft one. */
+  --shadow-xs: 0 1px 2px 0 oklch(0.25 0.04 280 / 0.05);
+  --shadow-sm: 0 1px 2px 0 oklch(0.25 0.04 280 / 0.06),
+               0 1px 3px 0 oklch(0.25 0.04 280 / 0.08);
+  --shadow-md: 0 2px 4px -1px oklch(0.25 0.04 280 / 0.06),
+               0 4px 12px -2px oklch(0.25 0.04 280 / 0.10);
+  --shadow-lg: 0 4px 8px -2px oklch(0.25 0.04 280 / 0.06),
+               0 12px 28px -4px oklch(0.25 0.04 280 / 0.12);
+  --shadow-xl: 0 8px 16px -4px oklch(0.25 0.04 280 / 0.08),
+               0 24px 48px -8px oklch(0.25 0.04 280 / 0.16);
+  --shadow-brand: 0 4px 14px -2px oklch(0.52 0.24 277 / 0.30);
+  --shadow-brand-lg: 0 8px 30px -4px oklch(0.52 0.24 277 / 0.38);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root {
+  --background: oklch(0.993 0.003 280);
+  --foreground: oklch(0.19 0.02 280);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.19 0.02 280);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.19 0.02 280);
+
+  --primary: oklch(0.52 0.24 277);
+  --primary-foreground: oklch(0.99 0.005 280);
+
+  --secondary: oklch(0.968 0.008 280);
+  --secondary-foreground: oklch(0.28 0.05 280);
+
+  --muted: oklch(0.968 0.008 280);
+  --muted-foreground: oklch(0.52 0.02 280);
+
+  --accent: oklch(0.955 0.015 280);
+  --accent-foreground: oklch(0.35 0.10 277);
+
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.99 0.01 25);
+
+  --success: oklch(0.58 0.14 160);
+  --success-foreground: oklch(0.99 0.01 160);
+
+  --warning: oklch(0.72 0.16 70);
+  --warning-foreground: oklch(0.22 0.05 70);
+
+  --info: oklch(0.60 0.14 235);
+  --info-foreground: oklch(0.99 0.01 235);
+
+  --brand: oklch(0.52 0.24 277);
+  --brand-foreground: oklch(0.99 0.005 280);
+  --brand-muted: oklch(0.62 0.19 285);
+  --brand-subtle: oklch(0.96 0.025 280);
+  --violet: oklch(0.62 0.21 300);
+  --violet-subtle: oklch(0.96 0.025 300);
+
+  --border: oklch(0.91 0.008 280);
+  --input: oklch(0.91 0.008 280);
+  --ring: oklch(0.52 0.24 277);
+
+  --chart-1: oklch(0.52 0.24 277);
+  --chart-2: oklch(0.62 0.21 300);
+  --chart-3: oklch(0.66 0.16 325);
+  --chart-4: oklch(0.62 0.15 235);
+  --chart-5: oklch(0.68 0.14 190);
+
+  --radius: 0.75rem;
+
+  --sidebar: oklch(0.985 0.005 280);
+  --sidebar-foreground: oklch(0.19 0.02 280);
+  --sidebar-primary: oklch(0.52 0.24 277);
+  --sidebar-primary-foreground: oklch(0.99 0.005 280);
+  --sidebar-accent: oklch(0.955 0.015 280);
+  --sidebar-accent-foreground: oklch(0.35 0.10 277);
+  --sidebar-border: oklch(0.91 0.008 280);
+  --sidebar-ring: oklch(0.52 0.24 277);
+}
+
+.dark {
+  --background: oklch(0.155 0.018 280);
+  --foreground: oklch(0.97 0.008 280);
+
+  /* Cards sit *above* the background rather than below it, which is
+   * what makes a dark UI read as layered instead of flat. */
+  --card: oklch(0.198 0.020 280);
+  --card-foreground: oklch(0.97 0.008 280);
+
+  --popover: oklch(0.215 0.022 280);
+  --popover-foreground: oklch(0.97 0.008 280);
+
+  --primary: oklch(0.68 0.19 283);
+  --primary-foreground: oklch(0.15 0.03 280);
+
+  --secondary: oklch(0.26 0.025 280);
+  --secondary-foreground: oklch(0.96 0.008 280);
+
+  --muted: oklch(0.25 0.022 280);
+  --muted-foreground: oklch(0.70 0.02 280);
+
+  --accent: oklch(0.29 0.045 280);
+  --accent-foreground: oklch(0.90 0.06 283);
+
+  --destructive: oklch(0.66 0.19 22);
+  --destructive-foreground: oklch(0.15 0.03 22);
+
+  --success: oklch(0.70 0.15 162);
+  --success-foreground: oklch(0.15 0.03 162);
+
+  --warning: oklch(0.79 0.15 72);
+  --warning-foreground: oklch(0.18 0.04 72);
+
+  --info: oklch(0.70 0.13 235);
+  --info-foreground: oklch(0.15 0.03 235);
+
+  --brand: oklch(0.68 0.19 283);
+  --brand-foreground: oklch(0.15 0.03 280);
+  --brand-muted: oklch(0.60 0.17 285);
+  --brand-subtle: oklch(0.28 0.06 280);
+  --violet: oklch(0.72 0.17 300);
+  --violet-subtle: oklch(0.28 0.06 300);
+
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.68 0.19 283);
+
+  --chart-1: oklch(0.68 0.19 283);
+  --chart-2: oklch(0.72 0.17 300);
+  --chart-3: oklch(0.74 0.14 325);
+  --chart-4: oklch(0.70 0.13 235);
+  --chart-5: oklch(0.76 0.12 190);
+
+  --sidebar: oklch(0.178 0.020 280);
+  --sidebar-foreground: oklch(0.97 0.008 280);
+  --sidebar-primary: oklch(0.68 0.19 283);
+  --sidebar-primary-foreground: oklch(0.15 0.03 280);
+  --sidebar-accent: oklch(0.29 0.045 280);
+  --sidebar-accent-foreground: oklch(0.90 0.06 283);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.68 0.19 283);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    font-variant-ligatures: contextual;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+
+  /* Headings get tighter tracking as they get larger, the way type
+   * is actually set. Tailwind's defaults are uniform, which is why
+   * large headings often look loose. */
+  h1 { letter-spacing: -0.035em; }
+  h2 { letter-spacing: -0.028em; }
+  h3 { letter-spacing: -0.02em; }
+
+  /* One consistent focus ring everywhere, visible only for keyboard
+   * users. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring/60 ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    background: var(--brand-subtle);
+    color: var(--accent-foreground);
+  }
+
+  /* Tabular figures in anything that counts, so numbers do not
+   * jitter as they change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Text filled with the brand gradient. Used for one phrase per
+   * page at most. */
+  .text-gradient-brand {
+    background-image: linear-gradient(
+      100deg,
+      var(--brand) 0%,
+      var(--violet) 55%,
+      var(--chart-3) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-gradient-brand {
+    background-image: linear-gradient(
+      100deg,
+      var(--brand) 0%,
+      var(--violet) 100%
+    );
+  }
+
+  /* The soft coloured glow behind hero sections and empty states. */
+  .bg-aurora {
+    background-image:
+      radial-gradient(
+        60rem 30rem at 15% -10%,
+        oklch(from var(--brand) l c h / 0.16),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 26rem at 90% 0%,
+        oklch(from var(--violet) l c h / 0.14),
+        transparent 60%
+      );
+  }
+
+  /* A hairline top highlight — the detail that separates a "card"
+   * from a "rectangle". */
+  .surface-raised {
+    box-shadow:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.6),
+      var(--shadow-sm);
+  }
+
+  .dark .surface-raised {
+    box-shadow:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.06),
+      var(--shadow-sm);
+  }
+
+  .grid-pattern {
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 3rem 3rem;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+  }
+
+  .shimmer {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(from var(--foreground) l c h / 0.06) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Anyone who has asked their system to stop animating things gets a
+ * static interface, not a slightly slower one. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

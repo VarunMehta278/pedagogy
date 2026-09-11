@@ -1,8 +1,13 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ---------------------------------------------------------------
+# Pedagogy — repository root
+#
+# This covers both client/ and server/ so that whichever folder a
+# command is run from, secrets and build output stay out of git.
+# ---------------------------------------------------------------
 
-# dependencies
-/node_modules
-/.pnp
+# Dependencies
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,42 +15,42 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# Build output
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
+# Secrets — never commit these.
+# server/.env holds SUPABASE_SERVICE_ROLE_KEY, which bypasses row
+# level security entirely, and JWT_SECRET, which can mint a valid
+# session for any account. Committing either one, even to a
+# private repo, means rotating both.
+.env
+.env.*
+!.env.example
 *.pem
+*.key
 
-# debug
+# Saved login sessions from manual curl testing. These contain a
+# real, unexpired JWT.
+cookies.txt
+*-cookies.txt
+
+# Testing
+coverage/
+
+# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-node_modules/
-dist/
-.next/
-.env
-.env.local
-.env.*.local
-
+# Editor and OS noise
 .DS_Store
-*.log
+.idea/
+.vscode/
+*.swp
