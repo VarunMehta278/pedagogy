@@ -68,6 +68,17 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   loading?: boolean;
   loadingText?: string;
+  /*
+   * Render the single child as the button instead of wrapping it.
+   *
+   * `<Button asChild><Link href="/events">Browse</Link></Button>`
+   * gives a real anchor that carries the button styling. Wrapping
+   * instead would nest an <a> inside a <button>, which is invalid
+   * HTML — the browser recovers from it, but keyboard and screen
+   * reader behaviour become unpredictable, and middle-click and
+   * "open in new tab" stop working.
+   */
+  asChild?: boolean;
 }
 
 export function Button({
@@ -77,13 +88,39 @@ export function Button({
   block,
   loading = false,
   loadingText,
+  asChild = false,
   disabled,
   children,
   ...props
 }: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size, block }), className);
+
+  if (asChild && React.isValidElement(children)) {
+    const child = children as React.ReactElement<{
+      className?: string;
+    }>;
+
+    /*
+     * An anchor has no `disabled`, so the disabled state is carried
+     * by aria-disabled plus the pointer-events class rather than a
+     * property the element would silently drop.
+     */
+    const isDisabled = disabled || loading;
+
+    return React.cloneElement(child, {
+      ...props,
+      className: cn(
+        classes,
+        isDisabled && "pointer-events-none opacity-50",
+        child.props.className
+      ),
+      "aria-disabled": isDisabled || undefined,
+    } as Record<string, unknown>);
+  }
+
   return (
     <button
-      className={cn(buttonVariants({ variant, size, block }), className)}
+      className={classes}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       {...props}

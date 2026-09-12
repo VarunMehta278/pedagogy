@@ -4,7 +4,10 @@ import {
   getMe,
   updateMe,
   getAdminUsers,
+  updateUserRole,
 } from "../controllers/userController";
+
+import { getAssignableUsers } from "../controllers/assignmentController";
 
 import {
   authenticate,
@@ -39,6 +42,30 @@ router.get(
   authenticate,
   authorize("admin"),
   getAdminUsers
+);
+
+/*
+ * The pool faculty picks judges and volunteers from.
+ *
+ * Also before "/:id", and it only ever returns accounts that
+ * already hold the requested role.
+ */
+router.get(
+  "/assignable",
+  authenticate,
+  authorize("faculty", "admin"),
+  getAssignableUsers
+);
+
+/*
+ * Admin promotes or demotes a user. This is the only way an
+ * account becomes a judge or a volunteer.
+ */
+router.put(
+  "/:id/role",
+  authenticate,
+  authorize("admin"),
+  updateUserRole
 );
 
 export default router;

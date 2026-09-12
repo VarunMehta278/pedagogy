@@ -13,7 +13,9 @@ const API_URL =
 export type UserRole =
   | "student"
   | "faculty"
-  | "admin";
+  | "admin"
+  | "judge"
+  | "volunteer";
 
 export type AuthUser = {
   id: string;
@@ -40,6 +42,12 @@ export function dashboardPathForRole(
 
     case "admin":
       return "/admin/dashboard";
+
+    case "judge":
+      return "/judge/dashboard";
+
+    case "volunteer":
+      return "/volunteer/dashboard";
 
     default:
       /*
@@ -141,4 +149,47 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
 
     return null;
   }
+}
+
+/*
+ * Human-readable role names, used wherever a role is shown to a
+ * person rather than compared in code.
+ */
+export const ROLE_LABELS: Record<string, string> = {
+  student: "Student",
+  faculty: "Faculty",
+  admin: "Admin",
+  judge: "Judge",
+  volunteer: "Volunteer",
+};
+
+export function roleLabel(role?: string | null) {
+  if (!role) return "Unknown";
+
+  return ROLE_LABELS[role] ?? role;
+}
+
+/*
+ * Guards a role-specific page.
+ *
+ * Returns the path to send the visitor to, or null when they belong
+ * here. Sending someone to their own dashboard rather than to the
+ * login page matters: a logged-in volunteer who opens a judge URL
+ * has not lost their session, so bouncing them to /login would be
+ * both wrong and confusing.
+ */
+export function guardRole(
+  user: AuthUser | null,
+  allowed: UserRole[],
+  pathname?: string | null
+) {
+  if (!user) {
+    return loginPathFor(pathname);
+  }
+
+  if (!allowed.includes(user.role as UserRole)) {
+    return dashboardPathForRole(user.role);
+  }
+
+  return null;
 }

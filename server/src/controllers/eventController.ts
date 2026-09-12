@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { AuthRequest } from "../middleware/authMiddleware";
+import { isVolunteerAssigned } from "../middleware/eventAccess";
 import { createNotification } from "../services/notificationService";
 import { getOrdinalPosition } from "../utils/ordinals";
 export const createEvent = async (
@@ -659,6 +660,32 @@ export const markAttendance = async (
       });
     }
 
+    /*
+     * Volunteers check people in too, but only for the events they
+     * have actually been put on. Faculty and admin keep exactly the
+     * behaviour they had before this check existed.
+     */
+    if (req.user.role === "volunteer") {
+      const assigned = await isVolunteerAssigned(
+        eventId as string,
+        req.user.userId
+      );
+
+      if (assigned === null) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to verify event assignment",
+        });
+      }
+
+      if (!assigned) {
+        return res.status(404).json({
+          success: false,
+          message: "Event not found",
+        });
+      }
+    }
+
     // Find registration using QR registration code
     const { data: registration, error: registrationError } =
       await supabase
@@ -1258,14 +1285,27 @@ export const updateEventResult = async (
           profile_image
         )
       `)
-      .single();
+      .maybeSingle();
 
-    if (error || !result) {
+    if (error) {
       console.error("Update result error:", error);
 
       return res.status(500).json({
         success: false,
         message: "Failed to update result",
+      });
+    }
+
+    /*
+     * The update is scoped by both id and event_id, so matching no
+     * row means the result does not exist or belongs to a different
+     * event. That is the caller's mistake, not a server fault —
+     * .single() used to turn it into a 500 and log it as an error.
+     */
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Result not found for this event",
       });
     }
 

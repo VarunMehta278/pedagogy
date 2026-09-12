@@ -10,19 +10,24 @@ import {
   ChevronRight,
   GraduationCap,
   Search,
+  ShieldAlert,
   ShieldCheck,
+  UserCog,
   Users,
 } from "lucide-react";
 
 import {
   loginPathFor,
+  roleLabel,
+  type UserRole,
 } from "@/lib/auth";
+import { toast } from "@/lib/toast";
 
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { Input } from "@/components/ui/input";
+import { Input, Select, Label, FieldHint } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { SkeletonRows } from "@/components/ui/skeleton";
@@ -58,6 +63,21 @@ const roleFilters: [string, string][] = [
   ["student", "Students"],
   ["faculty", "Faculty"],
   ["admin", "Admins"],
+  ["judge", "Judges"],
+  ["volunteer", "Volunteers"],
+];
+
+/*
+ * Every assignable role. Judges and volunteers only ever come to
+ * exist via this page's role-change control — there is no signup
+ * flow for them — so the dialog below offers all five.
+ */
+const ALL_ROLES: UserRole[] = [
+  "student",
+  "faculty",
+  "admin",
+  "judge",
+  "volunteer",
 ];
 
 function formatDate(date?: string | null) {
@@ -89,22 +109,31 @@ function getInitials(name: string) {
  * desktop table and the mobile cards.
  */
 function RoleBadge({ role }: { role: string }) {
-  const config: Record<
+  const variants: Record<
     string,
-    { label: string; variant: "solid" | "success" | "info" | "muted" }
+    "solid" | "success" | "info" | "warning" | "outline" | "muted"
   > = {
-    admin: { label: "Admin", variant: "solid" },
-    faculty: { label: "Faculty", variant: "success" },
-    student: { label: "Student", variant: "info" },
+    admin: "solid",
+    faculty: "success",
+    student: "info",
+    judge: "warning",
+    volunteer: "outline",
   };
 
-  const entry =
-    config[role] || {
-      label: role.charAt(0).toUpperCase() + role.slice(1),
-      variant: "muted" as const,
-    };
+  return (
+    <Badge variant={variants[role] || "muted"}>
+      {roleLabel(role)}
+    </Badge>
+  );
+}
 
-  return <Badge variant={entry.variant}>{entry.label}</Badge>;
+function computeStats(list: User[]): UserStats {
+  return {
+    total: list.length,
+    students: list.filter((user) => user.role === "student").length,
+    faculty: list.filter((user) => user.role === "faculty").length,
+    admins: list.filter((user) => user.role === "admin").length,
+  };
 }
 
 export default function AdminUsersPage() {
@@ -126,6 +155,80 @@ export default function AdminUsersPage() {
     useState("all");
 
   const [page, setPage] = useState(1);
+
+  /*
+   * Role-change dialog. This is the only place judges and
+   * volunteers come to exist, so it lives on every row rather
+   * than behind a separate flow.
+   */
+  const [roleDialogUser, setRoleDialogUser] = useState<User | null>(null);
+  const [roleDialogValue, setRoleDialogValue] = useState<UserRole>("student");
+  const [roleUpdating, setRoleUpdating] = useState(false);
+
+  const openRoleDialog = (user: User) => {
+    setRoleDialogUser(user);
+    setRoleDialogValue((user.role as UserRole) || "student");
+  };
+
+  const closeRoleDialog = () => {
+    if (roleUpdating) return;
+    setRoleDialogUser(null);
+  };
+
+  const submitRoleChange = async () => {
+    if (!roleDialogUser) return;
+
+    if (roleDialogValue === roleDialogUser.role) {
+      toast.info("That is already this user's role.");
+      return;
+    }
+
+    try {
+      setRoleUpdating(true);
+
+      const response = await fetch(
+        `${API_URL}/users/${encodeURIComponent(roleDialogUser.id)}/role`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: roleDialogValue }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        toast.error(
+          data?.message || "Failed to update this user's role"
+        );
+        return;
+      }
+
+      const updatedUser = data.user;
+
+      const nextUsers = users.map((user) =>
+        user.id === roleDialogUser.id
+          ? { ...user, ...(updatedUser || {}), role: updatedUser?.role ?? roleDialogValue }
+          : user
+      );
+
+      setUsers(nextUsers);
+      setStats(computeStats(nextUsers));
+
+      toast.success(
+        `${roleDialogUser.name}'s role is now ${roleLabel(roleDialogValue)}.`
+      );
+
+      setRoleDialogUser(null);
+    } catch (error) {
+      console.error("Role update error:", error);
+
+      toast.error("Failed to update this user's role");
+    } finally {
+      setRoleUpdating(false);
+    }
+  };
 
   const loadUsers = async () => {
     try {
@@ -447,6 +550,10 @@ export default function AdminUsersPage() {
                         <th className="px-6 py-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Joined
                         </th>
+
+                        <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
 
@@ -499,6 +606,17 @@ export default function AdminUsersPage() {
                               <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                               {formatDate(user.created_at)}
                             </span>
+                          </td>
+
+                          <td className="px-6 py-4 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openRoleDialog(user)}
+                            >
+                              <UserCog className="h-3.5 w-3.5" aria-hidden="true" />
+                              Change role
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -559,6 +677,16 @@ export default function AdminUsersPage() {
                             <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
                             Joined {formatDate(user.created_at)}
                           </div>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4 w-full"
+                            onClick={() => openRoleDialog(user)}
+                          >
+                            <UserCog className="h-3.5 w-3.5" aria-hidden="true" />
+                            Change role
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -607,6 +735,114 @@ export default function AdminUsersPage() {
           </section>
         )}
       </div>
+
+      {roleDialogUser && (
+        <RoleChangeDialog
+          user={roleDialogUser}
+          value={roleDialogValue}
+          onValueChange={setRoleDialogValue}
+          loading={roleUpdating}
+          onCancel={closeRoleDialog}
+          onConfirm={submitRoleChange}
+        />
+      )}
     </main>
+  );
+}
+
+/* -------------------------------- */
+/* ROLE CHANGE DIALOG               */
+/* -------------------------------- */
+
+function RoleChangeDialog({
+  user,
+  value,
+  onValueChange,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  user: User;
+  value: UserRole;
+  onValueChange: (role: UserRole) => void;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const changed = value !== user.role;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl sm:p-7"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-subtle text-primary">
+          <ShieldAlert className="h-5 w-5" aria-hidden="true" />
+        </div>
+
+        <h2 className="mt-4 text-lg font-semibold tracking-tight">
+          Change role
+        </h2>
+
+        <p className="mt-1 text-sm text-muted-foreground">
+          {user.name} is currently{" "}
+          <span className="font-medium text-foreground">
+            {roleLabel(user.role)}
+          </span>
+          .
+        </p>
+
+        <div className="mt-5">
+          <Label htmlFor="role-change-select">New role</Label>
+
+          <Select
+            id="role-change-select"
+            value={value}
+            disabled={loading}
+            onChange={(event) =>
+              onValueChange(event.target.value as UserRole)
+            }
+          >
+            {ALL_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {roleLabel(role)}
+              </option>
+            ))}
+          </Select>
+
+          <FieldHint>
+            Judges and volunteers only gain access to their tools
+            once assigned this role — this is the only way to
+            create one.
+          </FieldHint>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row-reverse">
+          <Button
+            variant="brand"
+            block
+            loading={loading}
+            loadingText="Saving…"
+            disabled={!changed}
+            onClick={onConfirm}
+          >
+            Confirm role change
+          </Button>
+
+          <Button
+            variant="outline"
+            block
+            disabled={loading}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

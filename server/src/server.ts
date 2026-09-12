@@ -16,6 +16,8 @@ import notificationRoutes from "./routes/notificationRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminEventRoutes from "./routes/adminEventRoutes";
 import analyticsRoutes from "./routes/analyticsRoutes";
+import judgeRoutes from "./routes/judgeRoutes";
+import volunteerRoutes from "./routes/volunteerRoutes";
 
 dotenv.config();
 
@@ -80,6 +82,8 @@ app.use(
   "/api/admin/analytics",
   analyticsRoutes
 );
+app.use("/api/judge", judgeRoutes);
+app.use("/api/volunteer", volunteerRoutes);
 
 
 // Health check

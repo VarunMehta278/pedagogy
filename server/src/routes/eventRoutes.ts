@@ -15,6 +15,25 @@ import {
 } from "../controllers/eventController";
 
 import {
+  assignJudges,
+  assignVolunteers,
+  getEventJudges,
+  getEventVolunteers,
+  removeJudge,
+  removeVolunteer,
+} from "../controllers/assignmentController";
+
+import {
+  getEvaluationCriteria,
+  setEvaluationCriteria,
+} from "../controllers/criteriaController";
+
+import {
+  finalizeResults,
+  getEvaluationSummary,
+} from "../controllers/evaluationController";
+
+import {
   authenticate,
   authorize,
   optionalAuthenticate,
@@ -74,6 +93,91 @@ router.delete(
   authenticate,
   authorize("faculty", "admin"),
   deleteEventResult
+);
+
+/*
+ * ------------------------------------------------------------------
+ * Judging and volunteering — faculty and admin only.
+ *
+ * These sit above the public "/:id" route for the same reason
+ * "/manage" does: Express matches in order, and "/:id" would
+ * otherwise swallow "/:id/judges".
+ * ------------------------------------------------------------------
+ */
+
+router.get(
+  "/:id/judges",
+  authenticate,
+  authorize("faculty", "admin"),
+  getEventJudges
+);
+
+router.post(
+  "/:id/judges",
+  authenticate,
+  authorize("faculty", "admin"),
+  assignJudges
+);
+
+router.delete(
+  "/:id/judges/:userId",
+  authenticate,
+  authorize("faculty", "admin"),
+  removeJudge
+);
+
+router.get(
+  "/:id/volunteers",
+  authenticate,
+  authorize("faculty", "admin"),
+  getEventVolunteers
+);
+
+router.post(
+  "/:id/volunteers",
+  authenticate,
+  authorize("faculty", "admin"),
+  assignVolunteers
+);
+
+router.delete(
+  "/:id/volunteers/:userId",
+  authenticate,
+  authorize("faculty", "admin"),
+  removeVolunteer
+);
+
+/*
+ * Criteria are readable by an assigned judge too — the controller
+ * decides, because a judge has to know what they are scoring
+ * against.
+ */
+router.get(
+  "/:id/criteria",
+  authenticate,
+  authorize("faculty", "admin", "judge"),
+  getEvaluationCriteria
+);
+
+router.put(
+  "/:id/criteria",
+  authenticate,
+  authorize("faculty", "admin"),
+  setEvaluationCriteria
+);
+
+router.get(
+  "/:id/evaluations",
+  authenticate,
+  authorize("faculty", "admin"),
+  getEvaluationSummary
+);
+
+router.post(
+  "/:id/finalize",
+  authenticate,
+  authorize("faculty", "admin"),
+  finalizeResults
 );
 
 /*

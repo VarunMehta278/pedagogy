@@ -85,6 +85,29 @@ export default function QRScannerPage() {
   const [lastCode, setLastCode] =
     useState("");
 
+  /*
+   * The scan callback is created once, when start() is called, so it
+   * closes over the `processing` and `lastCode` of that render and
+   * never sees a newer value. Both guards below were therefore dead:
+   * they always compared against false and "". Mirroring the state
+   * into refs gives the callback the live values, which is what stops
+   * the same code being submitted twice while a check-in is still in
+   * flight.
+   */
+  const processingRef = useRef(false);
+  const lastCodeRef = useRef("");
+
+  const markProcessing = (value: boolean) => {
+    processingRef.current = value;
+    setProcessing(value);
+  };
+
+  const rememberCode = (value: string) => {
+    lastCodeRef.current = value;
+    setLastCode(value);
+  };
+
+
   /* Presentation-only: a running tally and short history of
      successful check-ins, for a faculty member working a door. */
   const [scanHistory, setScanHistory] = useState<ScanHistoryEntry[]>([]);
@@ -113,13 +136,13 @@ export default function QRScannerPage() {
           },
         },
         async (decodedText) => {
-          if (processing) return;
+          if (processingRef.current) return;
 
-          if (decodedText === lastCode) {
+          if (decodedText === lastCodeRef.current) {
             return;
           }
 
-          setLastCode(decodedText);
+          rememberCode(decodedText);
 
           await stopScanner();
 
@@ -172,7 +195,7 @@ export default function QRScannerPage() {
     registrationCode: string
   ) => {
     try {
-      setProcessing(true);
+      markProcessing(true);
       setError("");
       setMessage("");
       setResult(null);
@@ -249,8 +272,8 @@ export default function QRScannerPage() {
         "Unable to verify the QR code. Please try again."
       );
     } finally {
-      setProcessing(false);
-      setLastCode("");
+      markProcessing(false);
+      rememberCode("");
     }
   };
 
@@ -258,18 +281,31 @@ export default function QRScannerPage() {
     setResult(null);
     setMessage("");
     setError("");
-    setLastCode("");
+    rememberCode("");
 
     await startScanner();
   };
 
   useEffect(() => {
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .catch(() => {});
-      }
+      /*
+       * Release the camera on unmount. stop() rejects when the
+       * scanner was never started or is mid-start, so the state is
+       * checked first and the promise is still guarded — an
+       * unhandled rejection here would surface as a red overlay on
+       * a page the user has already navigated away from. clear()
+       * afterwards frees the DOM the library attached.
+       */
+      const scanner = scannerRef.current;
+
+      if (!scanner) return;
+
+      scannerRef.current = null;
+
+      Promise.resolve()
+        .then(() => (scanner.getState() === 2 ? scanner.stop() : null))
+        .then(() => scanner.clear())
+        .catch(() => {});
     };
   }, []);
 
@@ -352,16 +388,27 @@ export default function QRScannerPage() {
               {/* Scanner target — huge, for a phone at a door */}
 
               <div
-                id="qr-reader"
                 className={cn(
-                  "flex min-h-[380px] w-full items-center justify-center overflow-hidden rounded-2xl bg-muted sm:min-h-[440px]",
+                  "relative flex w-full items-center justify-center overflow-hidden rounded-2xl bg-muted min-h-[380px] sm:min-h-[440px]",
                   scanning
                     ? "border-2 border-success/60"
                     : "border-2 border-dashed border-border"
                 )}
               >
+                {/*
+                  html5-qrcode takes ownership of #qr-reader and
+                  replaces its children with a <video>. React must
+                  therefore never render anything inside that node —
+                  it would try to remove children the library had
+                  already swapped out, which throws
+                  "NotFoundError: The node to be removed is not a
+                  child of this node" the moment the camera starts.
+                  The placeholders are siblings overlaid on top.
+                */}
+                <div id="qr-reader" className="w-full" />
+
                 {!scanning && !starting && (
-                  <div className="flex flex-col items-center gap-3 px-6 text-center text-muted-foreground">
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-muted-foreground">
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-subtle text-primary">
                       <QrCode size={28} aria-hidden="true" />
                     </div>
@@ -370,7 +417,7 @@ export default function QRScannerPage() {
                 )}
 
                 {starting && (
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground">
                     <Spinner className="h-7 w-7" />
                     <p className="text-sm font-medium">Starting camera…</p>
                   </div>
