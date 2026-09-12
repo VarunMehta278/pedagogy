@@ -54,3 +54,16 @@ yarn-error.log*
 .idea/
 .vscode/
 *.swp
+
+# ---------------------------------------------------------------
+# Supabase CLI
+#
+# supabase/.temp/ holds the CLI's working state for the LINKED
+# project, including pooler-url — a full postgres connection string
+# with the database password embedded. It must never be committed.
+#
+# supabase/migrations/ is deliberately NOT ignored: those are schema
+# files and belong in version control.
+# ---------------------------------------------------------------
+supabase/.temp/
+supabase/.branches/
