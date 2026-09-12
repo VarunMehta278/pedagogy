@@ -25,11 +25,49 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+/*
+ * Render terminates TLS and forwards over plain HTTP, so without this
+ * every request looks like it came from the proxy: req.ip would be the
+ * proxy's address and the IP-keyed rate limiter would put all users in
+ * one bucket, letting a single attacker lock out everybody.
+ */
+app.set("trust proxy", 1);
+
 // Middleware
-const allowedOrigins = [
-  "http://localhost:3000",
-  process.env.FRONTEND_URL,
-].filter(Boolean);
+
+/*
+ * A browser's Origin header never carries a trailing slash or mixed
+ * case, and the comparison below is an exact string match, so the
+ * configured value is normalised to the same shape first. A
+ * FRONTEND_URL of "https://example.vercel.app/" would otherwise fail
+ * to match and the API would answer without CORS headers, which the
+ * browser reports as "Failed to fetch".
+ *
+ * FRONTEND_URL may list several origins separated by commas, so a
+ * Vercel preview deployment can be allowed alongside the production
+ * domain without changing this file.
+ */
+const normaliseOrigin = (value: string) =>
+  value.trim().replace(/\/+$/, "").toLowerCase();
+
+const allowedOrigins = new Set(
+  [
+    "http://localhost:3000",
+    ...(process.env.FRONTEND_URL || "").split(","),
+  ]
+    .map(normaliseOrigin)
+    .filter(Boolean)
+);
+
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.FRONTEND_URL
+) {
+  console.warn(
+    "FRONTEND_URL is not set. Cross-site requests from the deployed " +
+      "frontend will be blocked by CORS."
+  );
+}
 
 app.use(
   cors({
@@ -41,7 +79,7 @@ app.use(
       }
 
       if (
-        allowedOrigins.includes(origin)
+        allowedOrigins.has(normaliseOrigin(origin))
       ) {
         return callback(null, true);
       }

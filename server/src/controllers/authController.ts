@@ -3,6 +3,10 @@ import bcrypt from "bcryptjs";
 import { supabase } from "../config/supabase";
 import jwt from "jsonwebtoken";
 
+import {
+  SESSION_MAX_AGE_MS,
+  sessionCookieOptions,
+} from "../config/cookies";
 import { getPasswordProblem } from "../utils/password";
 
 export const register = async (req: Request, res: Response) => {
@@ -173,10 +177,8 @@ export const login = async (req: Request, res: Response) => {
 
     // Store JWT in secure HTTP-only cookie
     res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      ...sessionCookieOptions(),
+      maxAge: SESSION_MAX_AGE_MS,
     });
 
     // Never send password back to frontend
@@ -201,11 +203,10 @@ export const logout = async (
   res: Response
 ) => {
   try {
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-    });
+    res.clearCookie(
+      "token",
+      sessionCookieOptions()
+    );
 
     return res.json({
       success: true,
