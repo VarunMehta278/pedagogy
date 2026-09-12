@@ -59,3 +59,20 @@ export const violatedConstraint = (
 
   return haystack.includes(name);
 };
+
+/*
+ * The participant-limit trigger added in migration 004 raises
+ * EVENT_FULL when an event has no slots left.
+ *
+ * This is the authoritative capacity answer, because the trigger
+ * takes a row lock on the event before counting — unlike the API's
+ * own count, which two concurrent requests can both read as "room
+ * available". When this fires, the event really is full.
+ */
+export const isEventFull = (error: MaybePgError): boolean => {
+  if (!error || typeof error !== "object") return false;
+
+  const message = (error as { message?: unknown }).message;
+
+  return typeof message === "string" && message.includes("EVENT_FULL");
+};

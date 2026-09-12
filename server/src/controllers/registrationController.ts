@@ -6,6 +6,7 @@ import { supabase } from "../config/supabase";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { createNotification } from "../services/notificationService";
 import {
+  isEventFull,
   isUniqueViolation,
   violatedConstraint,
 } from "../utils/dbErrors";
@@ -344,6 +345,20 @@ export const registerForEvent = async (
             })
             .select()
             .single();
+
+    /*
+     * The capacity trigger locks the event row before counting, so
+     * when it fires the event genuinely is full — unlike the API's
+     * own count earlier in this handler, which two concurrent
+     * requests can both read as "room available". This is the
+     * authoritative answer, and it arrives as a failed insert.
+     */
+    if (isEventFull(registrationError)) {
+      return res.status(409).json({
+        success: false,
+        message: "This event is full",
+      });
+    }
 
     /*
      * The unique index on (event_id, student_id) is what actually

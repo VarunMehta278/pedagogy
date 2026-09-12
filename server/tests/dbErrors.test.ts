@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   isCheckViolation,
+  isEventFull,
   isForeignKeyViolation,
   isUniqueViolation,
   violatedConstraint,
@@ -72,4 +73,26 @@ test("a non-unique error never matches a constraint name", () => {
     ),
     false
   );
+});
+
+test("recognises the capacity trigger firing", () => {
+  assert.equal(
+    isEventFull({ code: "P0001", message: "EVENT_FULL" }),
+    true
+  );
+
+  // Postgres prefixes the message in some drivers.
+  assert.equal(
+    isEventFull({
+      code: "P0001",
+      message: 'raise exception EVENT_FULL',
+    }),
+    true
+  );
+});
+
+test("does not mistake other errors for a full event", () => {
+  assert.equal(isEventFull({ code: "23505", message: "duplicate key" }), false);
+  assert.equal(isEventFull(null), false);
+  assert.equal(isEventFull({}), false);
 });
