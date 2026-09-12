@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/motion/reveal";
+import StudentTeamPanel from "@/components/events/StudentTeamPanel";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -38,6 +39,9 @@ interface Event {
   rules: string | null;
   image_url: string | null;
   status: string;
+  participation_type: "individual" | "team";
+  min_team_size: number;
+  max_team_size: number;
   organizer?: {
     id: string;
     name: string;
@@ -683,6 +687,18 @@ export default function EventDetailsPage() {
                 )}
 
               </section>
+
+              {/* Team */}
+              {event.participation_type === "team" && (
+                <section className="mt-10 border-t border-border pt-8">
+                  <StudentTeamPanel
+                    eventId={eventId}
+                    registered={!!registration}
+                    minTeamSize={event.min_team_size}
+                    maxTeamSize={event.max_team_size}
+                  />
+                </section>
+              )}
 
             </div>
           </div>

@@ -9,6 +9,14 @@ type CertificateData = {
   certificateType: "winner" | "participation";
   eventDate?: string | null;
   department?: string | null;
+  /*
+   * Team events only. The certificate still belongs to one member —
+   * studentName stays their name, so each person downloads their own —
+   * but it also records the team they competed with and who else was
+   * in it.
+   */
+  teamName?: string | null;
+  teamMembers?: string[] | null;
 };
 
 const getPositionText = (position?: number | null) => {
@@ -215,6 +223,30 @@ export const generateCertificatePDF = async (
         .moveTo(220, 300)
         .lineTo(622, 300)
         .stroke();
+
+      /*
+       * Team line
+       *
+       * Sits in the existing gap between the underline at y=300 and
+       * the achievement text at y=325, so no other coordinate on the
+       * certificate has to move and individual certificates render
+       * byte-for-byte as they did before.
+       */
+      if (data.teamName) {
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(11)
+          .fillColor("#555555")
+          .text(
+            `Team ${data.teamName}`,
+            90,
+            305,
+            {
+              align: "center",
+              width: width - 180,
+            }
+          );
+      }
 
       /*
        * Achievement text

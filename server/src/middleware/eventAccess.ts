@@ -33,7 +33,7 @@ export const getEvent = async (eventId: string) => {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, title, organizer_id, status, event_date, venue, results_finalized_at"
+      "id, title, organizer_id, status, event_date, venue, results_finalized_at, participation_type, min_team_size, max_team_size"
     )
     .eq("id", eventId)
     .maybeSingle();

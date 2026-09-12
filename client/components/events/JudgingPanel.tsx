@@ -71,7 +71,32 @@ type ParticipantRow = {
   position: number | null;
 };
 
+/* Team events replace `participants` with `teams` in the evaluations
+ * summary. A member's `student` can be null (deleted account). */
+type TeamMember = {
+  id: string;
+  student_id: string;
+  role: string;
+  student: Person | Person[] | null;
+};
+
+type TeamRow = {
+  team_id: string;
+  team_name: string;
+  team_code: string;
+  members: TeamMember[];
+  member_count: number;
+  attended_count: number;
+  evaluations: Evaluation[];
+  judges_submitted: number;
+  final_score: number | null;
+  position: number | null;
+  size_complete: boolean;
+  size_warning?: string | boolean | null;
+};
+
 type Summary = {
+  participation_type?: "individual" | "team";
   criteria: (Criterion & { id: string })[];
   judges: Person[];
   progress: {
@@ -80,7 +105,8 @@ type Summary = {
     total: number;
     complete: boolean;
   }[];
-  participants: ParticipantRow[];
+  participants?: ParticipantRow[];
+  teams?: TeamRow[];
   finalized_at: string | null;
 };
 
@@ -773,8 +799,10 @@ function ScoresPanel({
     );
   }
 
-  const { criteria, progress, participants, finalized_at } =
-    summary;
+  const { criteria, progress, finalized_at } = summary;
+  const isTeamEvent = summary.participation_type === "team";
+  const participants = summary.participants || [];
+  const teams = summary.teams || [];
 
   const criterionName = (id: string) =>
     criteria.find((c) => c.id === id)?.name ?? "Criterion";
@@ -866,7 +894,185 @@ function ScoresPanel({
           Leaderboard
         </h3>
 
-        {participants.length === 0 ? (
+        {isTeamEvent ? (
+          teams.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No teams"
+              description="No teams have been formed for this event yet."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="bg-muted/50 text-left">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">#</th>
+                    <th className="px-4 py-3 font-medium">Team</th>
+                    <th className="px-4 py-3 font-medium">Members</th>
+                    <th className="px-4 py-3 font-medium">Judges</th>
+                    <th className="px-4 py-3 text-right font-medium">
+                      Final score
+                    </th>
+                    <th className="w-10 px-4 py-3" />
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {teams.map((row) => {
+                    const isOpen = expanded === row.team_id;
+
+                    return (
+                      <tr
+                        key={row.team_id}
+                        className="border-t border-border align-top transition-colors hover:bg-accent/40"
+                      >
+                        <td className="tabular px-4 py-3 font-semibold">
+                          {row.position ? (
+                            row.position <= 3 ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Award
+                                  className={cn(
+                                    "h-4 w-4",
+                                    row.position === 1 && "text-warning",
+                                    row.position === 2 &&
+                                      "text-muted-foreground",
+                                    row.position === 3 && "text-violet"
+                                  )}
+                                  aria-hidden="true"
+                                />
+                                {row.position}
+                              </span>
+                            ) : (
+                              row.position
+                            )
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{row.team_name}</p>
+
+                            {row.size_complete === false && (
+                              <Badge variant="warning" size="sm">
+                                {typeof row.size_warning === "string" &&
+                                row.size_warning
+                                  ? row.size_warning
+                                  : "Size warning"}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {row.team_code}
+                          </p>
+
+                          {isOpen && (
+                            <div className="mt-3 space-y-3">
+                              {row.evaluations.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  No judge has scored this team yet.
+                                </p>
+                              ) : (
+                                row.evaluations.map((evaluation) => {
+                                  const judge = summary.judges.find(
+                                    (j) => j.id === evaluation.judge_id
+                                  );
+
+                                  return (
+                                    <div
+                                      key={evaluation.judge_id}
+                                      className="rounded-lg border border-border bg-muted/30 p-3"
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-semibold">
+                                          {judge?.name ?? "Judge"}
+                                        </p>
+                                        <span className="tabular text-xs font-semibold">
+                                          {evaluation.total_score} /{" "}
+                                          {evaluation.max_total}
+                                        </span>
+                                      </div>
+
+                                      <ul className="mt-2 space-y-1">
+                                        {(evaluation.scores || []).map(
+                                          (score) => (
+                                            <li
+                                              key={score.criterion_id}
+                                              className="flex justify-between gap-3 text-xs text-muted-foreground"
+                                            >
+                                              <span>
+                                                {criterionName(
+                                                  score.criterion_id
+                                                )}
+                                              </span>
+                                              <span className="tabular">
+                                                {score.score}
+                                              </span>
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+
+                                      {evaluation.remarks && (
+                                        <p className="mt-2 text-xs italic text-muted-foreground">
+                                          “{evaluation.remarks}”
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="tabular px-4 py-3 text-muted-foreground">
+                          {row.member_count}
+                        </td>
+
+                        <td className="tabular px-4 py-3 text-muted-foreground">
+                          {row.judges_submitted}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {row.final_score === null ? (
+                            <Badge variant="muted" size="sm">
+                              Not yet scored
+                            </Badge>
+                          ) : (
+                            <span className="tabular font-semibold">
+                              {row.final_score}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={
+                              isOpen ? "Hide breakdown" : "Show breakdown"
+                            }
+                            onClick={() =>
+                              setExpanded(isOpen ? null : row.team_id)
+                            }
+                          >
+                            {isOpen ? (
+                              <ChevronDown aria-hidden="true" />
+                            ) : (
+                              <ChevronRight aria-hidden="true" />
+                            )}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : participants.length === 0 ? (
           <EmptyState
             icon={Users}
             title="No participants"
@@ -1079,10 +1285,10 @@ function ScoresPanel({
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                This ranks participants by final score, writes the
-                winners into the event results, notifies them, and
-                locks judging. It replaces any results you entered
-                by hand, and it cannot be undone.
+                This ranks {isTeamEvent ? "teams" : "participants"} by
+                final score, writes the winners into the event results,
+                notifies them, and locks judging. It replaces any
+                results you entered by hand, and it cannot be undone.
               </p>
 
               {!confirming ? (

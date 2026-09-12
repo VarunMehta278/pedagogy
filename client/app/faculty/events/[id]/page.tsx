@@ -24,6 +24,7 @@ import { useEffect, useMemo, useState } from "react";
 import { loginPathFor } from "@/lib/auth";
 import AnnouncementPanel from "@/components/events/AnnouncementPanel";
 import JudgingPanel from "@/components/events/JudgingPanel";
+import FacultyTeamsPanel from "@/components/events/FacultyTeamsPanel";
 import FacultyNavigation from "@/components/layout/FacultyNavigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1544,6 +1545,12 @@ export default function FacultyManageEventPage() {
 
             <section id="judging" className="scroll-mt-24">
               <JudgingPanel eventId={event.id} />
+            </section>
+
+            {/* TEAMS */}
+
+            <section id="teams" className="scroll-mt-24">
+              <FacultyTeamsPanel eventId={event.id} />
             </section>
 
             {/* ANNOUNCEMENTS */}

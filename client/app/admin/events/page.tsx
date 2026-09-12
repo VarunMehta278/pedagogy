@@ -30,7 +30,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Input, Select } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { SkeletonRows } from "@/components/ui/skeleton";
+import { Skeleton, SkeletonRows } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/motion/reveal";
 
 const API_URL =
@@ -66,6 +66,18 @@ type Event = {
     email: string;
     department?: string | null;
   } | null;
+};
+
+/*
+ * GET /admin/events does not select the team columns, so they are
+ * fetched separately (GET /events/:id, which does) and kept in a
+ * side map rather than reshaping Event — the admin listing itself
+ * stays exactly what it always was.
+ */
+type ParticipationInfo = {
+  participation_type: "individual" | "team";
+  min_team_size: number;
+  max_team_size: number;
 };
 
 type Stats = {
@@ -143,6 +155,59 @@ export default function AdminEventsPage() {
   const [error, setError] =
     useState("");
 
+  const [participationById, setParticipationById] = useState<
+    Record<string, ParticipationInfo>
+  >({});
+
+  /*
+   * Enriches the list with each event's participation type, one
+   * request per event (the only endpoint that carries it besides
+   * the admin listing, which omits it). Best-effort and
+   * non-blocking: a failed lookup just leaves that event showing
+   * as Individual, it never blocks or errors the page.
+   */
+  const loadParticipation = async (list: Event[]) => {
+    const results = await Promise.allSettled(
+      list.map(async (event) => {
+        const response = await fetch(
+          `${API_URL}/events/${encodeURIComponent(event.id)}`,
+          { credentials: "include" }
+        );
+
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        const found = data?.event;
+
+        if (!found) return null;
+
+        return [
+          event.id,
+          {
+            participation_type:
+              found.participation_type === "team"
+                ? "team"
+                : "individual",
+            min_team_size: found.min_team_size ?? 1,
+            max_team_size: found.max_team_size ?? 1,
+          } as ParticipationInfo,
+        ] as const;
+      })
+    );
+
+    setParticipationById((previous) => {
+      const next = { ...previous };
+
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          next[result.value[0]] = result.value[1];
+        }
+      }
+
+      return next;
+    });
+  };
+
   const loadEvents = async () => {
     try {
       setLoading(true);
@@ -178,7 +243,9 @@ export default function AdminEventsPage() {
         );
       }
 
-      setEvents(data.events || []);
+      const list: Event[] = data.events || [];
+
+      setEvents(list);
       setStats(
         data.stats || {
           total: 0,
@@ -189,6 +256,9 @@ export default function AdminEventsPage() {
           cancelled: 0,
         }
       );
+
+      /* Fire-and-forget: never blocks the main list from rendering. */
+      loadParticipation(list);
     } catch (err) {
       console.error(err);
 
@@ -481,6 +551,7 @@ export default function AdminEventsPage() {
                     <th className="px-5 py-4">Organizer</th>
                     <th className="px-5 py-4">Date</th>
                     <th className="px-5 py-4">Participants</th>
+                    <th className="px-5 py-4">Type</th>
                     <th className="px-5 py-4">Status</th>
                     <th className="px-5 py-4 text-right">Actions</th>
                   </tr>
@@ -550,6 +621,12 @@ export default function AdminEventsPage() {
                       </td>
 
                       <td className="px-5 py-5">
+                        <ParticipationBadge
+                          info={participationById[event.id]}
+                        />
+                      </td>
+
+                      <td className="px-5 py-5">
                         <StatusBadge status={event.status} kind="event" />
                       </td>
 
@@ -613,7 +690,12 @@ export default function AdminEventsPage() {
                       </div>
                     </div>
 
-                    <StatusBadge status={event.status} kind="event" />
+                    <div className="flex flex-col items-end gap-1.5">
+                      <StatusBadge status={event.status} kind="event" />
+                      <ParticipationBadge
+                        info={participationById[event.id]}
+                      />
+                    </div>
                   </div>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -714,6 +796,32 @@ function StatusSelect({
       <option value="completed">Completed</option>
       <option value="cancelled">Cancelled</option>
     </Select>
+  );
+}
+
+function ParticipationBadge({
+  info,
+}: {
+  info?: ParticipationInfo;
+}) {
+  if (!info) {
+    return <Skeleton className="h-5 w-20 rounded-full" />;
+  }
+
+  if (info.participation_type !== "team") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[0.6875rem] font-medium text-muted-foreground">
+        <Users size={11} aria-hidden="true" />
+        Individual
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-subtle px-2.5 py-1 text-[0.6875rem] font-medium text-accent-foreground">
+      <Users size={11} aria-hidden="true" />
+      Team · {info.min_team_size}–{info.max_team_size}
+    </span>
   );
 }
 

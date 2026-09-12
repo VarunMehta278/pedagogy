@@ -7,6 +7,7 @@ import {
   paramId,
   sendDenial,
 } from "../middleware/eventAccess";
+import { isTeamEvent } from "../utils/teams";
 
 /*
  * Everything a judge can see.
@@ -45,6 +46,9 @@ export const getMyJudgeEvents = async (
           venue,
           status,
           image_url,
+          participation_type,
+          min_team_size,
+          max_team_size,
           results_finalized_at,
           organizer:users!events_organizer_id_fkey (
             id, name, department
@@ -76,13 +80,28 @@ export const getMyJudgeEvents = async (
      */
     const withProgress = await Promise.all(
       events.map(async (event: any) => {
-        const [{ count: participants }, { count: evaluated }] =
-          await Promise.all([
-            supabase
+        /*
+         * On a team event the judge scores teams, so the progress
+         * counter has to count teams — otherwise "2 of 30" would be
+         * measured against a roster the judge never scores one by one.
+         */
+        const teamEvent = isTeamEvent(event);
+
+        const subjects = teamEvent
+          ? supabase
+              .from("teams")
+              .select("id", { count: "exact", head: true })
+              .eq("event_id", event.id)
+              .eq("status", "active")
+          : supabase
               .from("registrations")
               .select("id", { count: "exact", head: true })
               .eq("event_id", event.id)
-              .neq("status", "cancelled"),
+              .neq("status", "cancelled");
+
+        const [{ count: participants }, { count: evaluated }] =
+          await Promise.all([
+            subjects,
             supabase
               .from("judge_evaluations")
               .select("id", { count: "exact", head: true })
@@ -147,6 +166,7 @@ export const getJudgeEventDetail = async (
           `
           id, title, description, category, event_date,
           start_time, end_time, venue, status, rules,
+          participation_type, min_team_size, max_team_size,
           results_finalized_at,
           organizer:users!events_organizer_id_fkey (id, name, department)
         `
@@ -179,7 +199,7 @@ export const getJudgeEventDetail = async (
         .from("judge_evaluations")
         .select(
           `
-          id, registration_id, total_score, max_total, remarks,
+          id, registration_id, team_id, total_score, max_total, remarks,
           submitted_at, updated_at,
           scores:judge_evaluation_scores (criterion_id, score)
         `
@@ -213,8 +233,54 @@ export const getJudgeEventDetail = async (
       });
     }
 
+    /*
+     * A team event is judged team by team, so the judge is handed
+     * teams rather than a roster. Individual events return exactly
+     * what they always did.
+     */
+    if (isTeamEvent(eventResult.data)) {
+      const { data: teams, error: teamsError } = await supabase
+        .from("teams")
+        .select(
+          `
+          id, name, team_code, leader_id, created_at,
+          members:team_members (
+            id, student_id, role,
+            student:users!team_members_student_id_fkey (
+              id, name, email, department, year
+            )
+          )
+        `
+        )
+        .eq("event_id", eventId)
+        .eq("status", "active")
+        .order("created_at", { ascending: true });
+
+      if (teamsError) {
+        console.error("Judge teams error:", teamsError);
+
+        return res.status(500).json({
+          success: false,
+          message: "Failed to load the teams",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        participation_type: "team",
+        event: eventResult.data,
+        criteria: criteriaResult.data || [],
+        teams: (teams || []).map((team: any) => ({
+          ...team,
+          member_count: (team.members || []).length,
+        })),
+        evaluations: mineResult.data || [],
+      });
+    }
+
     return res.status(200).json({
       success: true,
+      participation_type: "individual",
       event: eventResult.data,
       criteria: criteriaResult.data || [],
       participants: participantsResult.data || [],

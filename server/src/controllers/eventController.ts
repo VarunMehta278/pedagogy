@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { isVolunteerAssigned } from "../middleware/eventAccess";
+import { isUniqueViolation } from "../utils/dbErrors";
+import { validateTeamConfig } from "../utils/teams";
 import { createNotification } from "../services/notificationService";
 import { getOrdinalPosition } from "../utils/ordinals";
 export const createEvent = async (
@@ -19,6 +21,9 @@ export const createEvent = async (
       venue,
       registration_deadline,
       participant_limit,
+      participation_type,
+      min_team_size,
+      max_team_size,
       rules,
       image_url,
     } = req.body;
@@ -83,6 +88,37 @@ export const createEvent = async (
       });
     }
 
+    /*
+     * Team settings. Omitting them keeps the event individual, which
+     * is exactly how every event behaved before teams existed — so an
+     * older client that does not send these fields is unaffected.
+     */
+    const resolvedParticipation =
+      participation_type === "team" ? "team" : "individual";
+
+    const resolvedMin =
+      resolvedParticipation === "team"
+        ? Number(min_team_size ?? 1)
+        : 1;
+
+    const resolvedMax =
+      resolvedParticipation === "team"
+        ? Number(max_team_size ?? resolvedMin)
+        : 1;
+
+    const teamProblem = validateTeamConfig(
+      resolvedParticipation,
+      resolvedMin,
+      resolvedMax
+    );
+
+    if (teamProblem) {
+      return res.status(400).json({
+        success: false,
+        message: teamProblem,
+      });
+    }
+
     const { data: event, error } = await supabase
       .from("events")
       .insert({
@@ -99,6 +135,9 @@ export const createEvent = async (
         image_url: image_url || null,
         status: "draft",
         organizer_id: req.user.userId,
+        participation_type: resolvedParticipation,
+        min_team_size: resolvedMin,
+        max_team_size: resolvedMax,
       })
       .select("*")
       .single();
@@ -147,6 +186,9 @@ export const getEvents = async (
         rules,
         image_url,
         status,
+        participation_type,
+        min_team_size,
+        max_team_size,
         organizer_id,
         created_at,
         organizer:users!events_organizer_id_fkey (
@@ -230,6 +272,9 @@ export const getEventById = async (
         rules,
         image_url,
         status,
+        participation_type,
+        min_team_size,
+        max_team_size,
         organizer_id,
         created_at,
         organizer:users!events_organizer_id_fkey (
@@ -759,6 +804,29 @@ export const markAttendance = async (
         })
         .select()
         .single();
+
+    /*
+     * Two volunteers can scan the same QR at the same moment and both
+     * pass the "already marked?" check above. The unique index on
+     * attendance(registration_id) is what actually stops the second
+     * write, and the loser is reported as an ordinary duplicate scan
+     * so the desk sees "already checked in" rather than an error.
+     */
+    if (isUniqueViolation(attendanceError)) {
+      const { data: existing } = await supabase
+        .from("attendance")
+        .select("id, attended_at")
+        .eq("registration_id", registration.id)
+        .maybeSingle();
+
+      return res.status(409).json({
+        success: false,
+        already_attended: true,
+        message: "Attendance has already been marked",
+        attendance: existing,
+        participant: registration.student,
+      });
+    }
 
     if (attendanceError || !attendance) {
       console.error(

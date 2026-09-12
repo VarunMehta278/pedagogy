@@ -142,9 +142,14 @@ export const aggregateJudgeTotals = (
  * not a second), and anyone without a score is left unranked rather
  * than being placed last.
  */
+/*
+ * The ranked subject. On a team event registration_id carries the
+ * team id and student_id is null, because the team is what placed —
+ * not any one member.
+ */
 export type Rankable = {
   registration_id: string;
-  student_id: string;
+  student_id: string | null;
   finalScore: number | null;
 };
 

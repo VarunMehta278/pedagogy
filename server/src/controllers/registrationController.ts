@@ -5,13 +5,27 @@ import QRCode from "qrcode";
 import { supabase } from "../config/supabase";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { createNotification } from "../services/notificationService";
+import {
+  isUniqueViolation,
+  violatedConstraint,
+} from "../utils/dbErrors";
 
 /**
  * Generate a unique registration code
  */
+/*
+ * The registration code IS the QR identity, so it has to be unique
+ * rather than merely unlikely to repeat.
+ *
+ * This was 3 bytes — 24 bits, about 16.7 million values. Birthday
+ * collisions become likely in the low thousands of registrations, and
+ * a collision inside one event would check in the wrong student.
+ * 8 bytes puts collision odds beyond any realistic number of rows,
+ * and a unique index on registration_code now backs it up.
+ */
 const generateRegistrationCode = () => {
   return `REG-${crypto
-    .randomBytes(3)
+    .randomBytes(8)
     .toString("hex")
     .toUpperCase()}`;
 };
@@ -330,6 +344,49 @@ export const registerForEvent = async (
             })
             .select()
             .single();
+
+    /*
+     * The unique index on (event_id, student_id) is what actually
+     * prevents a double registration — the check above can be passed
+     * by two concurrent requests at once. The loser lands here, and
+     * it is a conflict, not a server fault: reporting 500 would tell
+     * the student the site is broken when the database just did its
+     * job.
+     */
+    if (
+      violatedConstraint(
+        registrationError,
+        "registrations_one_per_student_event"
+      )
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "You are already registered for this event",
+      });
+    }
+
+    /*
+     * A registration_code collision is astronomically unlikely at 8
+     * bytes, but if it ever happens the honest answer is "try again"
+     * rather than a silent duplicate QR.
+     */
+    if (
+      violatedConstraint(
+        registrationError,
+        "registrations_code_unique"
+      )
+    ) {
+      console.error(
+        "Registration code collision:",
+        registrationError
+      );
+
+      return res.status(409).json({
+        success: false,
+        message:
+          "Could not allocate a registration code. Please try again.",
+      });
+    }
 
     if (
       registrationError ||

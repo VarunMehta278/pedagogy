@@ -39,6 +39,14 @@ export default function CreateEventPage() {
     image_url: "",
   });
 
+  /* Participation type is kept separate from `form` so the rest of
+     the payload stays byte-identical to before teams existed. */
+  const [participationType, setParticipationType] = useState<
+    "individual" | "team"
+  >("individual");
+  const [minTeamSize, setMinTeamSize] = useState("2");
+  const [maxTeamSize, setMaxTeamSize] = useState("4");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -90,6 +98,24 @@ export default function CreateEventPage() {
       ? "End time must be later than start time"
       : "";
 
+  const isTeamEvent = participationType === "team";
+
+  const minTeamSizeError =
+    attempted &&
+    isTeamEvent &&
+    (!minTeamSize || Number(minTeamSize) < 1)
+      ? "Minimum team size must be a whole number of at least 1"
+      : "";
+
+  const maxTeamSizeError =
+    attempted && isTeamEvent && !minTeamSizeError
+      ? Number(maxTeamSize) < Number(minTeamSize)
+        ? "Maximum team size must be at least the minimum"
+        : Number(maxTeamSize) > 50
+        ? "Maximum team size cannot exceed 50"
+        : ""
+      : "";
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -130,6 +156,26 @@ export default function CreateEventPage() {
         );
       }
 
+      if (participationType === "team") {
+        if (!minTeamSize || Number(minTeamSize) < 1) {
+          throw new Error(
+            "Minimum team size must be a whole number of at least 1"
+          );
+        }
+
+        if (Number(maxTeamSize) < Number(minTeamSize)) {
+          throw new Error(
+            "Maximum team size must be at least the minimum"
+          );
+        }
+
+        if (Number(maxTeamSize) > 50) {
+          throw new Error(
+            "Maximum team size cannot exceed 50"
+          );
+        }
+      }
+
       const response = await fetch(`${API_URL}/events`, {
         method: "POST",
         headers: {
@@ -151,6 +197,13 @@ export default function CreateEventPage() {
             : null,
           rules: form.rules.trim() || null,
           image_url: form.image_url.trim() || null,
+          ...(participationType === "team"
+            ? {
+                participation_type: "team",
+                min_team_size: Number(minTeamSize),
+                max_team_size: Number(maxTeamSize),
+              }
+            : {}),
         }),
       });
 
@@ -301,10 +354,92 @@ export default function CreateEventPage() {
             </div>
           </FormSection>
 
-          {/* Schedule */}
+          {/* Participation */}
 
           <FormSection
             number="02"
+            title="Participation"
+            description="Decide whether people register alone or as a team."
+          >
+            <div className="space-y-6">
+              <div>
+                <Label>Participation type</Label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ParticipationOption
+                    label="Individual"
+                    description="Each participant registers on their own."
+                    selected={participationType === "individual"}
+                    onSelect={() => setParticipationType("individual")}
+                  />
+
+                  <ParticipationOption
+                    label="Team"
+                    description="Participants register, then create or join a team."
+                    selected={participationType === "team"}
+                    onSelect={() => setParticipationType("team")}
+                  />
+                </div>
+              </div>
+
+              {participationType === "team" && (
+                <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="min_team_size" required>
+                      Minimum team size
+                    </Label>
+
+                    <Input
+                      type="number"
+                      id="min_team_size"
+                      name="min_team_size"
+                      value={minTeamSize}
+                      onChange={(e) => setMinTeamSize(e.target.value)}
+                      min="1"
+                      step="1"
+                      aria-invalid={Boolean(minTeamSizeError)}
+                      required
+                    />
+
+                    {minTeamSizeError ? (
+                      <FieldError>{minTeamSizeError}</FieldError>
+                    ) : (
+                      <FieldHint>At least 1 member per team.</FieldHint>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="max_team_size" required>
+                      Maximum team size
+                    </Label>
+
+                    <Input
+                      type="number"
+                      id="max_team_size"
+                      name="max_team_size"
+                      value={maxTeamSize}
+                      onChange={(e) => setMaxTeamSize(e.target.value)}
+                      min="1"
+                      step="1"
+                      aria-invalid={Boolean(maxTeamSizeError)}
+                      required
+                    />
+
+                    {maxTeamSizeError ? (
+                      <FieldError>{maxTeamSizeError}</FieldError>
+                    ) : (
+                      <FieldHint>Up to 50 members per team.</FieldHint>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </FormSection>
+
+          {/* Schedule */}
+
+          <FormSection
+            number="03"
             title="Schedule"
             description="When will the event take place?"
           >
@@ -380,7 +515,7 @@ export default function CreateEventPage() {
           {/* Venue & capacity */}
 
           <FormSection
-            number="03"
+            number="04"
             title="Venue & capacity"
             description="Where it happens, and how many can attend."
           >
@@ -431,7 +566,7 @@ export default function CreateEventPage() {
           {/* Rules */}
 
           <FormSection
-            number="04"
+            number="05"
             title="Rules"
             description="Share anything participants need to know, and an optional image for the listing."
           >
@@ -559,5 +694,37 @@ function FormSection({
 
       <CardContent className="pt-6">{children}</CardContent>
     </Card>
+  );
+}
+
+/* -------------------------------- */
+/* Participation option             */
+/* -------------------------------- */
+
+function ParticipationOption({
+  label,
+  description,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  description: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`rounded-xl border p-4 text-left transition-all duration-200 ease-out ${
+        selected
+          ? "border-primary bg-brand-subtle shadow-sm"
+          : "border-border bg-card hover:border-primary/30 hover:bg-accent/40"
+      }`}
+    >
+      <p className="text-sm font-semibold text-foreground">{label}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+    </button>
   );
 }

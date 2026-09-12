@@ -18,6 +18,7 @@ import adminEventRoutes from "./routes/adminEventRoutes";
 import analyticsRoutes from "./routes/analyticsRoutes";
 import judgeRoutes from "./routes/judgeRoutes";
 import volunteerRoutes from "./routes/volunteerRoutes";
+import teamRoutes from "./routes/teamRoutes";
 
 dotenv.config();
 
@@ -84,6 +85,14 @@ app.use(
 );
 app.use("/api/judge", judgeRoutes);
 app.use("/api/volunteer", volunteerRoutes);
+
+/*
+ * Team routes are mounted at /api rather than under a prefix because
+ * they span two shapes: /api/teams/... and /api/events/:id/teams/...
+ * Mounted AFTER eventRoutes so the existing /api/events routes keep
+ * first claim on their paths.
+ */
+app.use("/api", teamRoutes);
 
 
 // Health check

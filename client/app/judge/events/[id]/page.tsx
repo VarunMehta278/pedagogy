@@ -78,6 +78,28 @@ type Participant = {
   student?: Student | Student[] | null;
 };
 
+/*
+ * Team events replace `participants` with `teams` — a judge scores the
+ * TEAM once, never one evaluation per member. `members[].student` can
+ * be null (deleted account), so it is always normalised through
+ * `getRelation` before use, same as an individual's `student`.
+ */
+type TeamMember = {
+  id: string;
+  student_id: string;
+  role: string;
+  student?: Student | Student[] | null;
+};
+
+type JudgeTeam = {
+  id: string;
+  name: string;
+  team_code: string;
+  leader_id: string;
+  member_count: number;
+  members: TeamMember[];
+};
+
 type EvaluationScore = {
   criterion_id: string;
   score: number;
@@ -85,7 +107,8 @@ type EvaluationScore = {
 
 type Evaluation = {
   id: string;
-  registration_id: string;
+  registration_id?: string;
+  team_id?: string;
   total_score: number;
   max_total: number;
   remarks?: string | null;
@@ -174,6 +197,10 @@ export default function JudgeEventPage() {
   const [event, setEvent] = useState<JudgeEvent | null>(null);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [teams, setTeams] = useState<JudgeTeam[]>([]);
+  const [participationType, setParticipationType] = useState<
+    "individual" | "team"
+  >("individual");
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -221,7 +248,11 @@ export default function JudgeEventPage() {
 
       setEvent(data.event || null);
       setCriteria(data.criteria || []);
+      setParticipationType(
+        data.participation_type === "team" ? "team" : "individual"
+      );
       setParticipants(data.participants || []);
+      setTeams(data.teams || []);
       setEvaluations(data.evaluations || []);
     } catch (err) {
       console.error("Judge event load error:", err);
@@ -260,12 +291,26 @@ export default function JudgeEventPage() {
   }, [eventId]);
 
   const finalized = Boolean(event?.results_finalized_at);
+  const isTeamEvent = participationType === "team";
 
   const evaluationByRegId = useMemo(() => {
-    return new Map(evaluations.map((item) => [item.registration_id, item]));
+    return new Map(
+      evaluations
+        .filter((item) => item.registration_id)
+        .map((item) => [item.registration_id as string, item])
+    );
+  }, [evaluations]);
+
+  const evaluationByTeamId = useMemo(() => {
+    return new Map(
+      evaluations
+        .filter((item) => item.team_id)
+        .map((item) => [item.team_id as string, item])
+    );
   }, [evaluations]);
 
   const scoredCount = evaluations.length;
+  const totalEntities = isTeamEvent ? teams.length : participants.length;
 
   const filteredSections = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -296,15 +341,69 @@ export default function JudgeEventPage() {
     return { unscored, scored };
   }, [participants, search, evaluationByRegId]);
 
+  /* Team-event equivalent of `filteredSections` — same unscored/scored
+   * split, matched by `team_id` instead of `registration_id`. */
+  const filteredTeamSections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    const matches = (team: JudgeTeam) => {
+      if (!query) return true;
+
+      if (team.name.toLowerCase().includes(query)) return true;
+      if (team.team_code.toLowerCase().includes(query)) return true;
+
+      return team.members.some((member) => {
+        const student = getRelation(member.student);
+
+        return (
+          (student?.name || "").toLowerCase().includes(query) ||
+          (student?.email || "").toLowerCase().includes(query)
+        );
+      });
+    };
+
+    const unscored: JudgeTeam[] = [];
+    const scored: JudgeTeam[] = [];
+
+    teams.filter(matches).forEach((team) => {
+      if (evaluationByTeamId.has(team.id)) {
+        scored.push(team);
+      } else {
+        unscored.push(team);
+      }
+    });
+
+    return { unscored, scored };
+  }, [teams, search, evaluationByTeamId]);
+
   const selectedParticipant = useMemo(
     () => participants.find((p) => p.id === selectedId) || null,
     [participants, selectedId]
   );
 
+  const selectedTeam = useMemo(
+    () => teams.find((t) => t.id === selectedId) || null,
+    [teams, selectedId]
+  );
+
+  const hasSelectedEntity = isTeamEvent
+    ? Boolean(selectedTeam)
+    : Boolean(selectedParticipant);
+
   const selectedStudent = getRelation(selectedParticipant?.student);
-  const selectedEvaluation = selectedId
-    ? evaluationByRegId.get(selectedId)
-    : undefined;
+  const selectedTeamMemberNames = useMemo(
+    () =>
+      (selectedTeam?.members || [])
+        .map((member) => getRelation(member.student)?.name)
+        .filter((name): name is string => Boolean(name)),
+    [selectedTeam]
+  );
+
+  const selectedEvaluation = !selectedId
+    ? undefined
+    : isTeamEvent
+    ? evaluationByTeamId.get(selectedId)
+    : evaluationByRegId.get(selectedId);
   const hasEvaluation = Boolean(selectedEvaluation);
 
   const selectParticipant = (participant: Participant) => {
@@ -312,6 +411,26 @@ export default function JudgeEventPage() {
     setFormError("");
 
     const existing = evaluationByRegId.get(participant.id);
+    const initialScores: Record<string, string> = {};
+
+    criteria.forEach((criterion) => {
+      const found = existing?.scores.find(
+        (score) => score.criterion_id === criterion.id
+      );
+
+      initialScores[criterion.id] =
+        found !== undefined ? String(found.score) : "";
+    });
+
+    setScoreValues(initialScores);
+    setRemarks(existing?.remarks || "");
+  };
+
+  const selectTeam = (team: JudgeTeam) => {
+    setSelectedId(team.id);
+    setFormError("");
+
+    const existing = evaluationByTeamId.get(team.id);
     const initialScores: Record<string, string> = {};
 
     criteria.forEach((criterion) => {
@@ -366,7 +485,7 @@ export default function JudgeEventPage() {
   }, [criteria, scoreValues, totalWeight]);
 
   const canSubmit = useMemo(() => {
-    if (!selectedParticipant || criteria.length === 0) return false;
+    if (!hasSelectedEntity || criteria.length === 0) return false;
 
     return criteria.every((c) => {
       const raw = scoreValues[c.id];
@@ -377,10 +496,16 @@ export default function JudgeEventPage() {
 
       return !Number.isNaN(num) && num >= 0 && num <= c.max_score;
     });
-  }, [criteria, scoreValues, selectedParticipant]);
+  }, [criteria, scoreValues, hasSelectedEntity]);
 
   const submitEvaluation = async () => {
-    if (!event || !selectedParticipant || finalized) return;
+    if (!event || !hasSelectedEntity || finalized) return;
+
+    const selectedEntityId = isTeamEvent
+      ? selectedTeam?.id
+      : selectedParticipant?.id;
+
+    if (!selectedEntityId) return;
 
     const invalidCriterion = criteria.find((c) => {
       const raw = scoreValues[c.id];
@@ -410,7 +535,9 @@ export default function JudgeEventPage() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            registration_id: selectedParticipant.id,
+            ...(isTeamEvent
+              ? { team_id: selectedEntityId }
+              : { registration_id: selectedEntityId }),
             scores: criteria.map((c) => ({
               criterion_id: c.id,
               score: Number(scoreValues[c.id]),
@@ -436,8 +563,10 @@ export default function JudgeEventPage() {
       }
 
       const savedEvaluation: Evaluation = {
-        id: data.evaluation?.id ?? selectedEvaluation?.id ?? selectedParticipant.id,
-        registration_id: selectedParticipant.id,
+        id: data.evaluation?.id ?? selectedEvaluation?.id ?? selectedEntityId,
+        ...(isTeamEvent
+          ? { team_id: selectedEntityId }
+          : { registration_id: selectedEntityId }),
         total_score: data.evaluation?.total_score ?? liveTotal,
         max_total: data.evaluation?.max_total ?? maxTotal,
         remarks: remarks.trim() || null,
@@ -448,15 +577,21 @@ export default function JudgeEventPage() {
       };
 
       setEvaluations((current) => [
-        ...current.filter(
-          (item) => item.registration_id !== selectedParticipant.id
+        ...current.filter((item) =>
+          isTeamEvent
+            ? item.team_id !== selectedEntityId
+            : item.registration_id !== selectedEntityId
         ),
         savedEvaluation,
       ]);
 
+      const scoredName = isTeamEvent
+        ? selectedTeam?.name || "Team"
+        : selectedStudent?.name || "Participant";
+
       toast.success(
         hasEvaluation ? "Evaluation updated" : "Evaluation submitted",
-        `${selectedStudent?.name || "Participant"} · ${savedEvaluation.total_score.toFixed(
+        `${scoredName} · ${savedEvaluation.total_score.toFixed(
           1
         )} / ${savedEvaluation.max_total.toFixed(1)}`
       );
@@ -607,8 +742,8 @@ export default function JudgeEventPage() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             icon={Users}
-            label="Participants"
-            value={participants.length}
+            label={isTeamEvent ? "Teams" : "Participants"}
+            value={totalEntities}
             tone="brand"
           />
 
@@ -622,10 +757,8 @@ export default function JudgeEventPage() {
           <StatCard
             icon={ClipboardCheck}
             label="Left to score"
-            value={Math.max(participants.length - scoredCount, 0)}
-            tone={
-              participants.length - scoredCount > 0 ? "warning" : "success"
-            }
+            value={Math.max(totalEntities - scoredCount, 0)}
+            tone={totalEntities - scoredCount > 0 ? "warning" : "success"}
           />
 
           <StatCard
@@ -654,12 +787,14 @@ export default function JudgeEventPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight">
-                      Participants
+                      {isTeamEvent ? "Teams" : "Participants"}
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {participants.length} registered · {scoredCount} scored
-                      by you
+                      {isTeamEvent
+                        ? `${teams.length} teams`
+                        : `${participants.length} registered`}{" "}
+                      · {scoredCount} scored by you
                     </p>
                   </div>
 
@@ -683,13 +818,76 @@ export default function JudgeEventPage() {
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by name, email or registration code"
+                    placeholder={
+                      isTeamEvent
+                        ? "Search by team name, code or member"
+                        : "Search by name, email or registration code"
+                    }
                     className="pl-10"
-                    aria-label="Search participants"
+                    aria-label={isTeamEvent ? "Search teams" : "Search participants"}
                   />
                 </div>
 
-                {participants.length === 0 ? (
+                {isTeamEvent ? (
+                  teams.length === 0 ? (
+                    <EmptyState
+                      className="mt-6"
+                      icon={Users}
+                      title="No teams yet"
+                      description="No teams have been formed for this event yet."
+                    />
+                  ) : filteredTeamSections.unscored.length === 0 &&
+                    filteredTeamSections.scored.length === 0 ? (
+                    <EmptyState
+                      className="mt-6"
+                      icon={Search}
+                      title="No matches"
+                      description="Try a different team name, code or member."
+                    />
+                  ) : (
+                    <div className="mt-5 space-y-6">
+                      {filteredTeamSections.unscored.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-warning">
+                            Not yet scored · {filteredTeamSections.unscored.length}
+                          </p>
+
+                          <div className="space-y-2">
+                            {filteredTeamSections.unscored.map((team) => (
+                              <TeamRow
+                                key={team.id}
+                                team={team}
+                                evaluation={undefined}
+                                selected={team.id === selectedId}
+                                onSelect={() => selectTeam(team)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!onlyUnscored && filteredTeamSections.scored.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-success">
+                            Scored · {filteredTeamSections.scored.length}
+                          </p>
+
+                          <div className="space-y-2">
+                            {filteredTeamSections.scored.map((team) => (
+                              <TeamRow
+                                key={team.id}
+                                team={team}
+                                evaluation={evaluationByTeamId.get(team.id)}
+                                selected={team.id === selectedId}
+                                onSelect={() => selectTeam(team)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : participants.length === 0 ? (
                   <EmptyState
                     className="mt-6"
                     icon={Users}
@@ -756,11 +954,15 @@ export default function JudgeEventPage() {
 
             <Card className="h-fit lg:sticky lg:top-24">
               <CardContent className="p-5 sm:p-6">
-                {!selectedParticipant ? (
+                {!hasSelectedEntity ? (
                   <EmptyState
                     icon={ClipboardCheck}
-                    title="Select a participant"
-                    description="Pick someone from the list to enter or review their score."
+                    title={isTeamEvent ? "Select a team" : "Select a participant"}
+                    description={
+                      isTeamEvent
+                        ? "Pick a team from the list to enter or review its score."
+                        : "Pick someone from the list to enter or review their score."
+                    }
                   />
                 ) : (
                   <>
@@ -771,12 +973,22 @@ export default function JudgeEventPage() {
                         </p>
 
                         <h2 className="mt-1 truncate text-lg font-semibold tracking-tight">
-                          {selectedStudent?.name || "Unknown participant"}
+                          {isTeamEvent
+                            ? selectedTeam?.name || "Unknown team"
+                            : selectedStudent?.name || "Unknown participant"}
                         </h2>
 
                         <p className="mt-1 font-mono text-xs text-muted-foreground">
-                          {selectedParticipant.registration_code}
+                          {isTeamEvent
+                            ? selectedTeam?.team_code
+                            : selectedParticipant?.registration_code}
                         </p>
+
+                        {isTeamEvent && selectedTeamMemberNames.length > 0 && (
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {selectedTeamMemberNames.join(", ")}
+                          </p>
+                        )}
                       </div>
 
                       {hasEvaluation && (
@@ -950,6 +1162,70 @@ function ParticipantRow({
         <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
           {participant.registration_code}
         </p>
+      </div>
+
+      {evaluation ? (
+        <span className="tabular shrink-0 rounded-full bg-success/12 px-2.5 py-1 text-xs font-semibold text-success">
+          {evaluation.total_score.toFixed(1)}/{evaluation.max_total.toFixed(1)}
+        </span>
+      ) : (
+        <span className="shrink-0 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning">
+          Pending
+        </span>
+      )}
+    </button>
+  );
+}
+
+/* -------------------------------- */
+/* TEAM ROW                         */
+/* -------------------------------- */
+
+function TeamRow({
+  team,
+  evaluation,
+  selected,
+  onSelect,
+}: {
+  team: JudgeTeam;
+  evaluation?: Evaluation;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const memberNames = team.members
+    .map((member) => getRelation(member.student)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={selected ? "true" : undefined}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-colors duration-200",
+        selected
+          ? "border-primary/50 bg-brand-subtle/60"
+          : "border-border bg-card hover:border-primary/30 hover:bg-accent/40"
+      )}
+    >
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+        <Users className="h-4 w-4" aria-hidden="true" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">
+          {team.name}
+        </p>
+
+        <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+          {team.team_code}
+        </p>
+
+        {memberNames.length > 0 && (
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {memberNames.join(", ")}
+          </p>
+        )}
       </div>
 
       {evaluation ? (
