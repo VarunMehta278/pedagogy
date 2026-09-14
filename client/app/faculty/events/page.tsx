@@ -59,7 +59,31 @@ type Event = {
 
   registration_count?: number;
   registrations_count?: number;
+
+  /*
+   * Set by the API. false means this event belongs to
+   * another member of faculty: visible, but not theirs to
+   * change.
+   */
+  can_manage?: boolean;
+
+  organizer?:
+    | { id?: string; name?: string }
+    | { id?: string; name?: string }[]
+    | null;
 };
+
+/*
+ * Supabase returns a joined relation as an object or as a
+ * single-item array depending on the query shape.
+ */
+function organizerName(event: Event) {
+  const organizer = Array.isArray(event.organizer)
+    ? event.organizer[0]
+    : event.organizer;
+
+  return organizer?.name || null;
+}
 
 const categories = [
   "All",
@@ -742,24 +766,47 @@ function FacultyEventCard({
 
         {/* ACTIONS */}
 
-        <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
-          <Link href={`/faculty/events/${event.id}`}>
-            <Button variant="default" block>
-              Manage event
-              <ChevronRight size={16} aria-hidden="true" />
-            </Button>
-          </Link>
+        {event.can_manage === false ? (
+          /*
+           * A colleague's event. Shown so faculty can see
+           * what is being planned — including drafts — but
+           * it opens the read-only page. The management
+           * routes would answer 403 regardless.
+           */
+          <div className="mt-5">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              {organizerName(event)
+                ? `${organizerName(event)} · view only`
+                : "View only"}
+            </p>
 
-          <Link
-            href={`/faculty/events/${event.id}/scanner`}
-            title="Scan QR attendance"
-            aria-label="Scan QR attendance"
-          >
-            <Button variant="outline" size="icon" className="h-full w-11">
-              <QrCode size={18} aria-hidden="true" />
-            </Button>
-          </Link>
-        </div>
+            <Link href={`/events/${event.id}`}>
+              <Button variant="outline" block>
+                View event
+                <ChevronRight size={16} aria-hidden="true" />
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
+            <Link href={`/faculty/events/${event.id}`}>
+              <Button variant="default" block>
+                Manage event
+                <ChevronRight size={16} aria-hidden="true" />
+              </Button>
+            </Link>
+
+            <Link
+              href={`/faculty/events/${event.id}/scanner`}
+              title="Scan QR attendance"
+              aria-label="Scan QR attendance"
+            >
+              <Button variant="outline" size="icon" className="h-full w-11">
+                <QrCode size={18} aria-hidden="true" />
+              </Button>
+            </Link>
+          </div>
+        )}
 
         {/* QUICK STATUS */}
 

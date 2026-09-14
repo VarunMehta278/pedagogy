@@ -303,10 +303,12 @@ export const getEventById = async (
     }
 
     /*
-     * A draft is only visible to the person writing it
-     * and to admins. Everyone else gets the same 404 as a
-     * nonexistent event, so the response cannot be used
-     * to discover which drafts exist.
+     * A draft is visible to the person writing it, to
+     * admins, and to other faculty — colleagues need to
+     * see what is being planned. Students and anonymous
+     * visitors get the same 404 as a nonexistent event, so
+     * the response still cannot be used to discover which
+     * drafts exist.
      */
     if (event.status === "draft") {
       const viewer = req.user;
@@ -315,7 +317,7 @@ export const getEventById = async (
         !!viewer &&
         viewer.userId === event.organizer_id;
 
-      let isAdmin = false;
+      let isColleague = false;
 
       if (viewer && !isOrganizer) {
         /*
@@ -329,10 +331,12 @@ export const getEventById = async (
           .eq("id", viewer.userId)
           .maybeSingle();
 
-        isAdmin = account?.role === "admin";
+        isColleague =
+          account?.role === "admin" ||
+          account?.role === "faculty";
       }
 
-      if (!isOrganizer && !isAdmin) {
+      if (!isOrganizer && !isColleague) {
         return res.status(404).json({
           success: false,
           message: "Event not found",
@@ -392,11 +396,18 @@ export const getMyEvents = async (
       `)
       .order("event_date", { ascending: true });
 
-    // Faculty can only see their own events.
-    if (req.user.role === "faculty") {
-      query = query.eq("organizer_id", req.user.userId);
-    }
-
+    /*
+     * Faculty see every event here, not only their own. A
+     * draft being written in another department still has
+     * to be visible, or two people book the same hall on
+     * the same evening and nobody finds out until the day.
+     *
+     * Seeing is not managing. can_manage marks which rows
+     * this person may actually change, and it is only an
+     * affordance for the UI — every mutating route checks
+     * organizer_id again on the server, so a client that
+     * ignores the flag still gets a 403.
+     */
     const { data, error } = await query;
 
     if (error) {
@@ -408,9 +419,21 @@ export const getMyEvents = async (
       });
     }
 
+    const viewerId = req.user.userId;
+    const viewerIsAdmin = req.user.role === "admin";
+
+    const events = (data || []).map(
+      (event: { organizer_id: string | null }) => ({
+        ...event,
+        can_manage:
+          viewerIsAdmin ||
+          event.organizer_id === viewerId,
+      })
+    );
+
     return res.json({
       success: true,
-      events: data || [],
+      events,
     });
   } catch (error) {
     console.error("Managed events error:", error);

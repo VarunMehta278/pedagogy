@@ -66,6 +66,9 @@ type Event = {
   rules?: string | null;
   image_url?: string | null;
   status: EventStatus;
+
+  /* Set by the API; false when another member of faculty owns it. */
+  can_manage?: boolean;
 };
 
 type Student = {
@@ -346,6 +349,17 @@ export default function FacultyManageEventPage() {
         throw new Error(
           "This event could not be found in your managed events."
         );
+      }
+
+      /*
+       * Faculty can now see each other's events, so this
+       * page can be reached for one they do not own. Send
+       * them to the public page rather than rendering a
+       * management UI whose every control would 403.
+       */
+      if (foundEvent.can_manage === false) {
+        router.replace(`/events/${eventId}`);
+        return;
       }
 
       setEvent(foundEvent);

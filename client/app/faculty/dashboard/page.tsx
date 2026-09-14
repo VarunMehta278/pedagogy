@@ -73,6 +73,9 @@ type Event = {
 
   registration_count?: number;
   registrations_count?: number;
+
+  /* Set by the API; false when another member of faculty owns it. */
+  can_manage?: boolean;
 };
 
 function formatDate(date?: string | null) {
@@ -210,7 +213,18 @@ export default function FacultyDashboard() {
       }
 
       setUser(userData.user);
-      setEvents(eventData.events || []);
+      /*
+       * /events/manage now returns every event so faculty
+       * can see each other's work, but this dashboard is
+       * about *your* events — its stat tiles and lists
+       * would quietly start counting the whole college
+       * otherwise. The full list lives on /faculty/events.
+       */
+      setEvents(
+        (eventData.events || []).filter(
+          (event: Event) => event.can_manage !== false
+        )
+      );
     } catch (err) {
       console.error(
         "Faculty dashboard error:",
