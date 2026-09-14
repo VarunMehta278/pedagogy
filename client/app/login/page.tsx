@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 
 import {
+  canForwardSignedInVisitor,
   dashboardPathForRole,
-  fetchCurrentUser,
+  getSession,
+  primeSession,
   readQueryParam,
   safeRedirect,
 } from "@/lib/auth";
@@ -82,14 +84,27 @@ export default function LoginPage() {
      * An already-signed-in visitor is forwarded instead
      * of being shown the login form again.
      */
-    fetchCurrentUser().then((user) => {
+    getSession().then((session) => {
       if (!active) return;
 
-      if (user) {
+      /*
+       * Only a confirmed session forwards. "unreachable"
+       * means the API did not answer, and forwarding on
+       * that is how a guarded page and this one end up
+       * throwing the visitor back and forth.
+       *
+       * canForwardSignedInVisitor() caps the hops, so even
+       * a genuinely confirmed session cannot bounce
+       * forever if something further along disagrees.
+       */
+      if (
+        session.state === "authenticated" &&
+        canForwardSignedInVisitor()
+      ) {
         router.replace(
           safeRedirect(
             readQueryParam("redirect"),
-            dashboardPathForRole(user.role)
+            dashboardPathForRole(session.user.role)
           )
         );
 
@@ -139,12 +154,27 @@ export default function LoginPage() {
        * there is no need for a second /users/me request
        * before deciding where to send them.
        */
+      /*
+       * Seed the shared session from the login response so
+       * the dashboard does not have to ask who this is all
+       * over again — one less round trip, and no window in
+       * which the two pages could answer differently.
+       */
+      if (data.user) {
+        primeSession(data.user);
+      }
+
       const destination =
         redirectTo ||
         dashboardPathForRole(data.user?.role);
 
+      /*
+       * No router.refresh() here. It remounts the route
+       * tree, which re-runs the destination page's own
+       * session check immediately — the extra load the
+       * visitor saw as the page reloading itself.
+       */
       router.replace(destination);
-      router.refresh();
     } catch (error) {
       console.error("Login error:", error);
 

@@ -18,7 +18,10 @@ import {
 } from "lucide-react";
 
 import {
+  clearAuthBounce,
+  clearSession,
   dashboardPathForRole,
+  getSession,
   loginPathFor,
 } from "@/lib/auth";
 
@@ -123,6 +126,7 @@ export default function StudentDashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     loadDashboard();
@@ -130,35 +134,54 @@ export default function StudentDashboardPage() {
 
   const loadDashboard = async () => {
     setLoading(true);
+    setError("");
 
     try {
       const [
-        userResponse,
+        session,
         registrationsResponse,
         certificatesResponse,
         notificationsResponse,
       ] = await Promise.all([
-        fetch(`${API_URL}/users/me`, {
-          credentials: "include",
-        }),
+        /*
+         * Shared with every other page and component, so
+         * this usually resolves from cache with no request
+         * at all — and can never disagree with the answer
+         * the login page saw a moment ago.
+         */
+        getSession(),
 
         fetch(`${API_URL}/registrations/me`, {
           credentials: "include",
+          cache: "no-store",
         }),
 
         fetch(`${API_URL}/certificates/me`, {
           credentials: "include",
+          cache: "no-store",
         }),
 
         fetch(`${API_URL}/notifications/me`, {
           credentials: "include",
+          cache: "no-store",
         }),
       ]);
 
       /*
-       * User
+       * An API that did not answer is not the same thing
+       * as a visitor who is signed out. Redirecting to
+       * /login on a 502 from a cold instance is what sent
+       * this page and the login page bouncing off each
+       * other, so it says so and offers a retry instead.
        */
-      if (!userResponse.ok) {
+      if (session.state === "unreachable") {
+        setError(
+          "Could not reach the server. Check your connection and try again."
+        );
+        return;
+      }
+
+      if (session.state === "anonymous") {
         router.replace(
           loginPathFor(
             window.location.pathname
@@ -167,12 +190,7 @@ export default function StudentDashboardPage() {
         return;
       }
 
-      const userData = await userResponse.json();
-
-      const currentUser =
-        userData.user ||
-        userData.data ||
-        userData;
+      const currentUser = session.user;
 
       /*
        * Faculty and admins are sent to their own
@@ -184,6 +202,12 @@ export default function StudentDashboardPage() {
         );
         return;
       }
+
+      /*
+       * We landed somewhere real, so forget any earlier
+       * bouncing and let the next visit forward normally.
+       */
+      clearAuthBounce();
 
       setUser(currentUser);
 
@@ -247,6 +271,8 @@ export default function StudentDashboardPage() {
         credentials: "include",
       });
 
+      /* Drop the shared session so /login does not forward back in. */
+      clearSession();
       router.replace("/login");
       router.refresh();
     } catch (error) {
@@ -304,6 +330,31 @@ export default function StudentDashboardPage() {
   ).length;
 
   const firstName = user?.name?.split(" ")[0] || "there";
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-background">
+        <StudentNavigation />
+
+        <div className="mx-auto max-w-lg px-4 py-24 text-center">
+          <h1 className="text-xl font-semibold">
+            Could not load your dashboard
+          </h1>
+
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            {error}
+          </p>
+
+          <Button
+            className="mt-6"
+            onClick={() => loadDashboard()}
+          >
+            Try again
+          </Button>
+        </div>
+      </main>
+    );
+  }
 
   if (loading) {
     return (

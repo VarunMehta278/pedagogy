@@ -112,11 +112,37 @@ export function readQueryParam(key: string) {
   ).get(key);
 }
 
-/*
- * Returns the signed-in user, or null when the session
- * is missing or expired.
- */
-export async function fetchCurrentUser(): Promise<AuthUser | null> {
+/* ------------------------------------------------------------------
+ * Session
+ *
+ * Three states, not two. Collapsing "signed out" and "could not
+ * reach the API" into a single null is what caused the redirect
+ * loop: a guarded page treated an unreachable API as a dead session
+ * and bounced to /login, the login page's own check happened to
+ * succeed, and it bounced straight back. Neither page was wrong on
+ * its own; they simply asked the same question twice and got two
+ * different answers.
+ *
+ * So the answer is now fetched once and shared. Concurrent callers
+ * join the same request instead of racing, and the result is held
+ * briefly so that a page and the components inside it cannot
+ * disagree about whether anyone is signed in.
+ * ------------------------------------------------------------------ */
+
+export type SessionResult =
+  | { state: "authenticated"; user: AuthUser }
+  | { state: "anonymous" }
+  | { state: "unreachable" };
+
+const SESSION_TTL_MS = 15_000;
+
+let cachedSession:
+  | { at: number; result: SessionResult }
+  | null = null;
+
+let inFlight: Promise<SessionResult> | null = null;
+
+async function requestSession(): Promise<SessionResult> {
   try {
     const response = await fetch(
       `${API_URL}/users/me`,
@@ -126,28 +152,166 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
       }
     );
 
+    /*
+     * Only the server saying "you are not signed in"
+     * counts as being signed out. A 500 or a 502 from a
+     * cold instance means the question went unanswered.
+     */
+    if (
+      response.status === 401 ||
+      response.status === 403
+    ) {
+      return { state: "anonymous" };
+    }
+
     if (!response.ok) {
-      return null;
+      return { state: "unreachable" };
     }
 
     const data = await response.json();
+    const user = data.user || data.data || null;
 
-    return data.user || null;
+    return user
+      ? { state: "authenticated", user }
+      : { state: "anonymous" };
   } catch (error) {
     /*
-     * A signed-out visitor, a server that is not running
-     * yet, or a dropped connection all land here. The
-     * caller already treats null as "not signed in", so
-     * this is a warning rather than an error — logging it
-     * with console.error made Next's dev overlay throw a
-     * red box over the page for an entirely normal case.
+     * A dropped connection or an API that is not running
+     * yet. Warn rather than error: console.error makes
+     * Next's dev overlay throw a red box over the page.
      */
     console.warn(
       "Session lookup failed:",
       error
     );
 
-    return null;
+    return { state: "unreachable" };
+  }
+}
+
+export async function getSession(options?: {
+  force?: boolean;
+}): Promise<SessionResult> {
+  const force = options?.force === true;
+
+  if (!force) {
+    if (
+      cachedSession &&
+      Date.now() - cachedSession.at < SESSION_TTL_MS
+    ) {
+      return cachedSession.result;
+    }
+
+    if (inFlight) {
+      return inFlight;
+    }
+  }
+
+  const request = requestSession();
+
+  if (!force) {
+    inFlight = request;
+  }
+
+  try {
+    const result = await request;
+
+    /*
+     * A failed reach is not an answer, so it is never
+     * cached — the next call tries again.
+     */
+    if (result.state !== "unreachable") {
+      cachedSession = { at: Date.now(), result };
+    }
+
+    return result;
+  } finally {
+    if (inFlight === request) {
+      inFlight = null;
+    }
+  }
+}
+
+/*
+ * The login response already carries the user, so seeding the cache
+ * with it means the dashboard does not have to ask again. That
+ * removes both the extra round trip and the window in which the two
+ * pages could disagree.
+ */
+export function primeSession(user: AuthUser) {
+  cachedSession = {
+    at: Date.now(),
+    result: { state: "authenticated", user },
+  };
+
+  inFlight = null;
+
+  clearAuthBounce();
+}
+
+export function clearSession() {
+  cachedSession = null;
+  inFlight = null;
+}
+
+/*
+ * Returns the signed-in user, or null when the session
+ * is missing, expired, or could not be checked.
+ */
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const session = await getSession();
+
+  return session.state === "authenticated"
+    ? session.user
+    : null;
+}
+
+/* ------------------------------------------------------------------
+ * Loop breaker
+ *
+ * Even with one shared answer, a bad deploy or a half-working cookie
+ * could still set two pages bouncing. This caps it: after a couple
+ * of hops in quick succession the login page stops forwarding and
+ * shows the form, so the worst case is an extra click rather than a
+ * tab that never settles.
+ * ------------------------------------------------------------------ */
+
+const BOUNCE_KEY = "pedagogy:auth-bounce";
+const BOUNCE_WINDOW_MS = 10_000;
+const BOUNCE_LIMIT = 2;
+
+export function canForwardSignedInVisitor(): boolean {
+  try {
+    const now = Date.now();
+    const raw = sessionStorage.getItem(BOUNCE_KEY);
+
+    const previous = raw
+      ? (JSON.parse(raw) as { at: number; count: number })
+      : null;
+
+    const recent =
+      previous &&
+      now - previous.at < BOUNCE_WINDOW_MS;
+
+    const count = recent ? previous.count + 1 : 1;
+
+    sessionStorage.setItem(
+      BOUNCE_KEY,
+      JSON.stringify({ at: now, count })
+    );
+
+    return count <= BOUNCE_LIMIT;
+  } catch {
+    /* Private mode, or storage disabled. Do not block the user. */
+    return true;
+  }
+}
+
+export function clearAuthBounce() {
+  try {
+    sessionStorage.removeItem(BOUNCE_KEY);
+  } catch {
+    /* Nothing to clear. */
   }
 }
 

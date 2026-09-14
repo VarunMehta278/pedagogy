@@ -28,6 +28,7 @@ import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 import { FadeIn, Stagger, StaggerItem } from "@/components/motion/reveal";
 
 import {
+  clearSession,
   dashboardPathForRole,
   loginPathFor,
 } from "@/lib/auth";
@@ -317,6 +318,8 @@ export default function FacultyDashboard() {
         error
       );
     } finally {
+      /* Drop the shared session so /login does not forward back in. */
+      clearSession();
       router.replace("/login");
       router.refresh();
     }

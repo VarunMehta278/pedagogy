@@ -21,6 +21,7 @@ import NotificationBell from "@/components/common/NotificationBell";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { clearSession } from "@/lib/auth";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -98,6 +99,8 @@ export default function StudentNavigation() {
         }
       );
     } finally {
+      /* Drop the shared session so /login does not forward back in. */
+      clearSession();
       router.replace("/login");
     }
   };

@@ -238,6 +238,7 @@
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
     font-variant-ligatures: contextual;
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -254,6 +255,18 @@
   h2 { letter-spacing: -0.028em; }
   h3 { letter-spacing: -0.02em; }
 
+  /* Headings break across lines evenly instead of leaving one
+   * orphaned word on the last line, and paragraphs never end on a
+   * single stranded word. Typesetters do this by hand; the browser
+   * will do it for free. */
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
   /* One consistent focus ring everywhere, visible only for keyboard
    * users. */
   :focus-visible {
@@ -263,6 +276,48 @@
   ::selection {
     background: var(--brand-subtle);
     color: var(--accent-foreground);
+  }
+
+  /* The text cursor picks up the brand colour. A one-line detail
+   * nobody consciously notices and everybody feels. */
+  input,
+  textarea {
+    caret-color: var(--primary);
+  }
+
+  /* Scrollbars, themed and thin. A default grey scrollbar is one of
+   * the loudest tells that an interface stopped at the component
+   * layer and never looked at the chrome around it. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(from var(--muted-foreground) l c h / 0.3)
+      transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* The transparent border plus background-clip is what insets the
+   * thumb, so it floats in the gutter rather than filling it. */
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(from var(--muted-foreground) l c h / 0.28);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(from var(--muted-foreground) l c h / 0.45);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 
   /* Tabular figures in anything that counts, so numbers do not
@@ -330,6 +385,26 @@
       linear-gradient(to bottom, var(--border) 1px, transparent 1px);
     background-size: 3rem 3rem;
     mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+  }
+
+  /* A hairline of white along the top edge of a filled button, so a
+   * solid colour reads as a lit surface instead of a flat swatch.
+   * Written out as whole box-shadows rather than composed from
+   * utilities, because box-shadow does not merge across classes. */
+  .btn-lit {
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.18), var(--shadow-sm);
+  }
+
+  .btn-lit:hover {
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.18), var(--shadow-brand);
+  }
+
+  .btn-lit-brand {
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.22), var(--shadow-brand);
+  }
+
+  .btn-lit-brand:hover {
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.22), var(--shadow-brand-lg);
   }
 
   .shimmer {

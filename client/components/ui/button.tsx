@@ -28,10 +28,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        /*
+         * The inset highlight on the filled variants is a hairline of
+         * white along the top edge. It is what stops a solid-colour
+         * button reading as a flat swatch.
+         */
         default:
-          "bg-primary text-primary-foreground shadow-sm hover:-translate-y-px hover:shadow-brand",
+          "bg-primary text-primary-foreground btn-lit hover:-translate-y-px",
         brand:
-          "bg-gradient-brand text-white shadow-brand hover:-translate-y-px hover:shadow-brand-lg",
+          "bg-gradient-brand text-white btn-lit-brand hover:-translate-y-px",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-accent hover:-translate-y-px",
         outline:

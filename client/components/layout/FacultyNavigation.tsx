@@ -12,6 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
+import { clearSession } from "@/lib/auth";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -48,6 +49,8 @@ export default function FacultyNavigation() {
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
+      /* Drop the shared session so /login does not forward back in. */
+      clearSession();
       router.replace("/login");
       router.refresh();
     }

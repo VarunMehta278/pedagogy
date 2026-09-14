@@ -16,7 +16,12 @@ export function Card({
     <div
       className={cn(
         "rounded-2xl border border-border bg-card text-card-foreground",
-        "shadow-sm transition-all duration-300 ease-out",
+        /*
+         * The easing matters more than the duration here: quint-out
+         * leaves fast and settles slowly, so the lift feels weighted
+         * rather than linear.
+         */
+        "shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
         interactive &&
           "hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg",
         className

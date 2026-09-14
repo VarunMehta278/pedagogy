@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import {
+  clearSession,
   loginPathFor,
 } from "@/lib/auth";
 
@@ -243,6 +244,8 @@ export default function AdminDashboardPage() {
         error
       );
     } finally {
+      /* Drop the shared session so /login does not forward back in. */
+      clearSession();
       router.replace("/login");
       router.refresh();
     }
