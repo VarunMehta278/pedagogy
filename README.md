@@ -358,4 +358,4 @@ shared, so two components cannot disagree about who is signed in.
 
 ## Author
 
-Built by **Varun Mehta**.
+Built by **Varun Mehta** & **Dewik Bavishi**
